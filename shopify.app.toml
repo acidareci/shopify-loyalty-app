@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "41e3e7762a78cabc7c7d9af91883cb13"
-application_url = "https://example.com"
+application_url = "https://loyalty-kutu-oyun.onrender.com"
 embedded = true
 name = "Loyalty-kutu-oyun"
 
@@ -34,7 +34,7 @@ name = "Description"
 type = "multi_line_text_field"
 
 [app_proxy]
-url = "https://example.com/proxy"
+url = "https://loyalty-kutu-oyun.onrender.com/proxy"
 subpath = "loyalty"
 prefix = "apps"
 
@@ -62,7 +62,7 @@ api_version = "2026-07"
   # Points are credited on-demand in the App Proxy instead.
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [ "https://loyalty-kutu-oyun.onrender.com/api/auth" ]
 
 [build]
 automatically_update_urls_on_dev = true
