@@ -9,6 +9,15 @@
   data-customer-id="{{ customer.id }}"
   data-proxy-url="/apps/{{ block.settings.proxy_subpath }}"
   data-api-override="{{ block.settings.api_url_override | strip }}"
+  style="
+    --lp-green: {{ block.settings.color_header_bg }};
+    --lp-green-text: {{ block.settings.color_header_text }};
+    --lp-cream: {{ block.settings.color_app_bg }};
+    --lp-cream-border: {{ block.settings.color_app_border }};
+    --lp-teal: {{ block.settings.color_accent }};
+    --lp-teal-dark: {{ block.settings.color_accent_dark }};
+    --lp-orange: {{ block.settings.color_highlight }};
+  "
 >
 
   {%- if customer == blank -%}
@@ -1104,6 +1113,52 @@
       "id": "api_url_override",
       "label": "Doğrudan API URL (İsteğe Bağlı)",
       "info": "Sadece App Proxy çalışmıyorsa kullanın. Uygulamanızın çalıştığı URL + /proxy. Örnek: https://sizin-app.fly.dev/proxy"
+    },
+    {
+      "type": "header",
+      "content": "Renkler"
+    },
+    {
+      "type": "color",
+      "id": "color_accent",
+      "label": "Ana Vurgu Rengi (butonlar, kuponlar)",
+      "default": "#2f5c56"
+    },
+    {
+      "type": "color",
+      "id": "color_accent_dark",
+      "label": "Vurgu Rengi (koyu ton)",
+      "default": "#244a45"
+    },
+    {
+      "type": "color",
+      "id": "color_highlight",
+      "label": "İkon / Detay Rengi",
+      "default": "#efa23c"
+    },
+    {
+      "type": "color",
+      "id": "color_header_bg",
+      "label": "Tablo Başlık Arka Planı",
+      "default": "#dfe9d8"
+    },
+    {
+      "type": "color",
+      "id": "color_header_text",
+      "label": "Tablo Başlık Yazı Rengi",
+      "default": "#355a3c"
+    },
+    {
+      "type": "color",
+      "id": "color_app_bg",
+      "label": "Genel Arka Plan Rengi",
+      "default": "#fbf2de"
+    },
+    {
+      "type": "color",
+      "id": "color_app_border",
+      "label": "Kenarlık Rengi",
+      "default": "#f1e1bf"
     },
     {
       "type": "header",
