@@ -1,0 +1,1046 @@
+{% comment %}
+  Puanlarım — Sadakat Sistemi Müşteri Bloğu
+  Shopify Online Store 2.0 Theme App Extension
+{% endcomment %}
+
+<div
+  id="loyalty-root"
+  data-logged-in="{% if customer %}true{% else %}false{% endif %}"
+  data-customer-id="{{ customer.id }}"
+  data-proxy-url="/apps/{{ block.settings.proxy_subpath }}"
+  data-api-override="{{ block.settings.api_url_override | strip }}"
+>
+
+  {%- if customer == blank -%}
+    <!-- ── GİRİŞ KAPISI ── -->
+    <div class="lp-gate">
+      <div class="lp-gate__card">
+        <div class="lp-gate__icon">{% comment %}icon{% endcomment %}
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+        </div>
+        <h2 class="lp-gate__title">{{ block.settings.gate_title }}</h2>
+        <p class="lp-gate__desc">{{ block.settings.gate_desc }}</p>
+        <a
+          href="{{ routes.account_login_url }}?return_to={{ request.path | url_encode }}"
+          class="lp-btn lp-btn--primary lp-btn--lg"
+        >
+          {{ block.settings.gate_btn }}
+        </a>
+      </div>
+    </div>
+
+  {%- else -%}
+    <!-- Liquid: Metafield verisini JS'e göm (proxy'ye gerek yok) -->
+    {%- assign lf = customer.metafields.app.loyalty_data -%}
+    <script>
+      window.__LP__ = {%- if lf and lf.value -%}{{ lf.value | json }}{%- else -%}null{%- endif -%};
+    </script>
+
+    <!-- ── ANA UYGULAMA ── -->
+    <div id="loyalty-app" class="lp-app" aria-live="polite">
+
+      <!-- İstatistik Kartları -->
+      <div class="lp-stats">
+
+        <div class="lp-card lp-card--primary">
+          <p class="lp-card__label">{{ block.settings.label_current }}</p>
+          <p class="lp-card__value" id="lp-current-points">—</p>
+          <p class="lp-card__sub">{{ block.settings.label_current_sub }}</p>
+          <button
+            class="lp-btn lp-btn--primary"
+            id="lp-open-convert"
+            disabled
+            aria-disabled="true"
+            data-label="{{ block.settings.btn_convert | escape }}"
+          >
+            {{ block.settings.btn_convert }}
+          </button>
+        </div>
+
+        <div class="lp-card">
+          <p class="lp-card__label">{{ block.settings.label_earned }}</p>
+          <p class="lp-card__value" id="lp-total-earned">—</p>
+          <p class="lp-card__sub">{{ block.settings.label_earned_sub }}</p>
+        </div>
+
+        <div class="lp-card">
+          <p class="lp-card__label">{{ block.settings.label_spent }}</p>
+          <p class="lp-card__value" id="lp-total-spent">—</p>
+          <p class="lp-card__sub">{{ block.settings.label_spent_sub }}</p>
+        </div>
+
+      </div>
+
+      <!-- Kupon Dönüştür Modal -->
+        <div
+        id="lp-modal"
+        class="lp-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="lp-modal-title"
+        hidden
+      >
+        <div class="lp-modal__backdrop" id="lp-modal-backdrop"></div>
+        <div class="lp-modal__card">
+          <h3 class="lp-modal__title" id="lp-modal-title">{{ block.settings.modal_title }}</h3>
+          <p class="lp-modal__desc">{{ block.settings.modal_desc }}</p>
+          <p class="lp-modal__balance">
+            Mevcut puanınız: <strong id="lp-modal-balance">0</strong>
+          </p>
+          <input
+            type="number"
+            id="lp-convert-amount"
+            class="lp-input"
+            min="1"
+            step="1"
+            placeholder="Miktar girin"
+            aria-label="Dönüştürülecek puan miktarı"
+          />
+          <p class="lp-modal__note">{{ block.settings.modal_note }}</p>
+          <div class="lp-modal__actions">
+            <button class="lp-btn lp-btn--ghost" id="lp-modal-cancel">
+              İptal
+            </button>
+            <button
+              class="lp-btn lp-btn--primary"
+              id="lp-modal-confirm"
+              data-label="{{ block.settings.modal_confirm | escape }}"
+            >
+              {{ block.settings.modal_confirm }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Aktif İndirim Kodları -->
+      <div class="lp-coupons">
+        <h3 class="lp-coupons__title">{{ block.settings.coupons_title }}</h3>
+        <div id="lp-coupons-list" data-empty="{{ block.settings.coupons_empty | escape }}"></div>
+      </div>
+
+    </div>
+
+    <!-- Toast bildirimi -->
+    <div id="lp-toast-container" aria-live="polite" aria-atomic="true"></div>
+
+  {%- endif -%}
+</div>
+
+<!-- ══════════════════════════════════════════════
+     STILLER
+══════════════════════════════════════════════ -->
+<style>
+  #loyalty-root {
+    --lp-text: var(--color-foreground, var(--color-text, #1a1a1a));
+    --lp-text-sub: color-mix(in srgb, var(--lp-text) 55%, transparent);
+    --lp-bg: var(--color-background, #fff);
+    --lp-surface: color-mix(in srgb, var(--lp-text) 4%, var(--lp-bg));
+    --lp-border: color-mix(in srgb, var(--lp-text) 12%, transparent);
+    --lp-accent: var(--color-button, var(--color-accent, #1a1a1a));
+    --lp-accent-text: var(--color-button-text, var(--color-background, #fff));
+    --lp-radius: 16px;
+    --lp-radius-sm: 10px;
+    --lp-shadow: 0 2px 16px rgba(0,0,0,.07), 0 1px 3px rgba(0,0,0,.06);
+    --lp-shadow-hover: 0 8px 32px rgba(0,0,0,.12), 0 2px 8px rgba(0,0,0,.08);
+    --lp-transition: 0.2s ease;
+    font-family: inherit;
+    color: var(--lp-text);
+  }
+
+  /* ── Giriş Kapısı ── */
+  .lp-gate {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 60px 16px;
+  }
+  .lp-gate__card {
+    background: var(--lp-bg);
+    border: 1px solid var(--lp-border);
+    border-radius: var(--lp-radius);
+    box-shadow: var(--lp-shadow);
+    padding: 48px 40px;
+    text-align: center;
+    max-width: 420px;
+    width: 100%;
+  }
+  .lp-gate__icon {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    width: 72px;
+    height: 72px;
+    background: var(--lp-surface);
+    border-radius: 50%;
+    margin-bottom: 20px;
+    color: var(--lp-text-sub);
+  }
+  .lp-gate__title {
+    margin: 0 0 10px;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--lp-text);
+  }
+  .lp-gate__desc {
+    margin: 0 0 28px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--lp-text-sub);
+  }
+
+  /* ── Butonlar ── */
+  .lp-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    border: none;
+    outline: none;
+    transition: opacity var(--lp-transition), transform var(--lp-transition), box-shadow var(--lp-transition);
+    text-decoration: none;
+  }
+  .lp-btn--primary {
+    background: var(--lp-accent);
+    color: var(--lp-accent-text);
+  }
+  .lp-btn--primary:hover:not(:disabled) {
+    opacity: .88;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0,0,0,.15);
+  }
+  .lp-btn--primary:active:not(:disabled) {
+    transform: translateY(0);
+  }
+  .lp-btn--ghost {
+    background: transparent;
+    color: var(--lp-text-sub);
+    border: 1px solid var(--lp-border);
+  }
+  .lp-btn--ghost:hover {
+    background: var(--lp-surface);
+  }
+  .lp-btn--lg {
+    padding: 13px 32px;
+    font-size: 15px;
+    border-radius: 10px;
+  }
+  .lp-btn:disabled {
+    opacity: .35;
+    cursor: not-allowed;
+  }
+
+  /* ── Ana Uygulama ── */
+  .lp-app { padding: 8px 0 24px; }
+
+  .lp-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+
+  /* ── Kartlar ── */
+  .lp-card {
+    background: var(--lp-bg);
+    border: 1px solid var(--lp-border);
+    border-radius: var(--lp-radius);
+    box-shadow: var(--lp-shadow);
+    padding: 28px 24px;
+    transition: box-shadow var(--lp-transition), transform var(--lp-transition);
+  }
+  .lp-card:hover {
+    box-shadow: var(--lp-shadow-hover);
+    transform: translateY(-2px);
+  }
+  .lp-card--primary {
+    background: var(--lp-accent);
+    border-color: transparent;
+    color: var(--lp-accent-text);
+  }
+  .lp-card--primary .lp-card__label,
+  .lp-card--primary .lp-card__sub {
+    color: color-mix(in srgb, var(--lp-accent-text) 70%, transparent);
+  }
+  .lp-card__label {
+    margin: 0 0 8px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--lp-text-sub);
+  }
+  .lp-card__value {
+    margin: 0 0 4px;
+    font-size: 36px;
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -.02em;
+  }
+  .lp-card__sub {
+    margin: 0 0 20px;
+    font-size: 12px;
+    color: var(--lp-text-sub);
+  }
+
+  /* ── Skeleton Loading ── */
+  @keyframes lp-shimmer {
+    0%   { background-position: -400px 0; }
+    100% { background-position: 400px 0; }
+  }
+  .lp-skeleton {
+    display: inline-block;
+    border-radius: 6px;
+    background: linear-gradient(90deg, var(--lp-border) 25%, color-mix(in srgb, var(--lp-border) 50%, var(--lp-bg)) 50%, var(--lp-border) 75%);
+    background-size: 400px 100%;
+    animation: lp-shimmer 1.4s ease infinite;
+  }
+  .lp-skeleton--value  { width: 100px; height: 36px; }
+  .lp-skeleton--code   { width: 140px; height: 18px; }
+  .lp-skeleton--timer  { width: 160px; height: 14px; }
+
+  /* ── Modal ── */
+  .lp-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  .lp-modal[hidden] { display: none; }
+  .lp-modal__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,.45);
+    backdrop-filter: blur(4px);
+  }
+  .lp-modal__card {
+    position: relative;
+    background: var(--lp-bg);
+    border-radius: var(--lp-radius);
+    box-shadow: 0 24px 64px rgba(0,0,0,.2);
+    padding: 36px;
+    width: 100%;
+    max-width: 420px;
+    animation: lp-modal-in .18s ease;
+  }
+  @keyframes lp-modal-in {
+    from { opacity: 0; transform: scale(.96) translateY(8px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+  }
+  .lp-modal__title {
+    margin: 0 0 8px;
+    font-size: 18px;
+    font-weight: 700;
+  }
+  .lp-modal__desc {
+    margin: 0 0 14px;
+    font-size: 14px;
+    color: var(--lp-text-sub);
+    line-height: 1.5;
+  }
+  .lp-modal__balance {
+    margin: 0 0 16px;
+    font-size: 13px;
+    color: var(--lp-text-sub);
+  }
+  .lp-modal__note {
+    margin: 6px 0 24px;
+    font-size: 12px;
+    color: var(--lp-text-sub);
+  }
+  .lp-modal__actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+  }
+
+  /* ── Input ── */
+  .lp-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 11px 14px;
+    border: 1px solid var(--lp-border);
+    border-radius: var(--lp-radius-sm);
+    background: var(--lp-surface);
+    color: var(--lp-text);
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    outline: none;
+    transition: border-color var(--lp-transition), box-shadow var(--lp-transition);
+  }
+  .lp-input:focus {
+    border-color: var(--lp-accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--lp-accent) 18%, transparent);
+  }
+
+  /* ── Kupon Listesi ── */
+  .lp-coupons__title {
+    margin: 0 0 14px;
+    font-size: 16px;
+    font-weight: 700;
+  }
+  #lp-coupons-list { display: flex; flex-direction: column; gap: 10px; }
+
+  .lp-coupon-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    align-items: center;
+    gap: 12px 16px;
+    background: var(--lp-bg);
+    border: 1px solid var(--lp-border);
+    border-radius: var(--lp-radius-sm);
+    box-shadow: var(--lp-shadow);
+    padding: 16px 20px;
+    transition: box-shadow var(--lp-transition);
+  }
+  .lp-coupon-row:hover { box-shadow: var(--lp-shadow-hover); }
+  .lp-coupon-row--skeleton { pointer-events: none; }
+
+  .lp-coupon-code {
+    font-family: ui-monospace, 'Cascadia Code', 'Courier New', monospace;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: .05em;
+    color: var(--lp-text);
+  }
+  .lp-coupon-value {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--lp-text-sub);
+  }
+
+  .lp-coupon-timer {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--lp-text-sub);
+    white-space: nowrap;
+  }
+  .lp-coupon-timer svg { flex-shrink: 0; }
+  .lp-timer--urgent { color: #e8330a; }
+
+  .lp-copy-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--lp-border);
+    border-radius: 8px;
+    background: var(--lp-surface);
+    color: var(--lp-text-sub);
+    cursor: pointer;
+    transition: background var(--lp-transition), color var(--lp-transition), border-color var(--lp-transition);
+    flex-shrink: 0;
+  }
+  .lp-copy-btn:hover { background: var(--lp-border); color: var(--lp-text); }
+  .lp-copy-btn--copied {
+    background: #16a34a;
+    border-color: #16a34a;
+    color: #fff;
+  }
+
+  .lp-empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--lp-text-sub);
+    font-size: 14px;
+    background: var(--lp-surface);
+    border-radius: var(--lp-radius-sm);
+    border: 1px dashed var(--lp-border);
+  }
+
+  /* ── Toast ── */
+  #lp-toast-container {
+    position: fixed;
+    bottom: 28px;
+    right: 24px;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .lp-toast {
+    padding: 12px 18px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    box-shadow: 0 8px 24px rgba(0,0,0,.15);
+    animation: lp-toast-in .2s ease;
+    max-width: 320px;
+  }
+  @keyframes lp-toast-in {
+    from { opacity: 0; transform: translateY(10px) scale(.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .lp-toast--success { background: #16a34a; color: #fff; }
+  .lp-toast--error   { background: #dc2626; color: #fff; }
+  .lp-toast--info    { background: var(--lp-accent); color: var(--lp-accent-text); }
+
+  /* ── Loading ── */
+  .lp-app--loading .lp-card__value { min-height: 36px; }
+
+  @media (max-width: 640px) {
+    .lp-stats { grid-template-columns: 1fr; }
+    .lp-coupon-row {
+      grid-template-columns: 1fr auto;
+      grid-template-rows: auto auto;
+    }
+    .lp-coupon-timer { grid-column: 1; }
+    .lp-coupon-value { text-align: right; }
+    .lp-gate__card { padding: 36px 24px; }
+  }
+</style>
+
+<!-- ══════════════════════════════════════════════
+     JAVASCRIPT
+══════════════════════════════════════════════ -->
+<script>
+(function () {
+  var root = document.getElementById('loyalty-root');
+  if (!root) return;
+
+    var isLoggedIn = root.dataset.loggedIn === 'true';
+    if (!isLoggedIn) return;
+
+    // FETCH_URL: use direct override if merchant provided one, otherwise use App Proxy
+    var PROXY_URL = root.dataset.proxyUrl || '/apps/loyalty';
+    var apiOverride = root.dataset.apiOverride || '';
+    var FETCH_URL = apiOverride || PROXY_URL;
+
+    var confirmBtnRef = document.getElementById('lp-modal-confirm');
+    var CONFIRM_LABEL = (confirmBtnRef && confirmBtnRef.dataset.label) || 'Kuponu Oluştur';
+
+  // ── Yardımcı Fonksiyonlar ──────────────────────────
+  function fmtPoints(n) {
+    return Math.floor(Number(n) || 0).toLocaleString('tr-TR');
+  }
+
+  function fmtCurrency(n) {
+    return new Intl.NumberFormat('tr-TR', {
+      style: 'currency',
+      currency: 'TRY',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    }).format(Number(n) || 0);
+  }
+
+  function showToast(msg, type) {
+    type = type || 'info';
+    var container = document.getElementById('lp-toast-container');
+    var toast = document.createElement('div');
+    toast.className = 'lp-toast lp-toast--' + type;
+    toast.textContent = msg;
+    container.appendChild(toast);
+    setTimeout(function () {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateY(8px)';
+      toast.style.transition = 'all .2s ease';
+      setTimeout(function () { toast.remove(); }, 220);
+    }, 3200);
+  }
+
+  // ── Veri Çekme ─────────────────────────────────────
+  var loyaltyData = null;
+
+  /**
+   * Robust fetch: handles non-JSON responses (HTML error pages, 4xx/5xx)
+   * and gives actionable error messages for common proxy misconfigurations.
+   */
+  function fetchData() {
+    var url = FETCH_URL;
+    console.log('[Loyalty] Fetching from:', url);
+
+    return fetch(url, {
+      headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+    })
+      .then(function (r) {
+        var ct = r.headers.get('content-type') || '';
+        console.log('[Loyalty] Response status:', r.status, 'Content-Type:', ct);
+
+        // Server returned non-JSON (likely HTML error page or proxy misconfiguration)
+        if (!ct.includes('application/json')) {
+          return r.text().then(function (body) {
+            console.error('[Loyalty] Non-JSON response body (first 300 chars):', body.slice(0, 300));
+            var hint = '';
+            if (r.status === 404) {
+              hint = 'App Proxy URL yapılandırılmamış veya yanlış. shopify.app.toml → [app_proxy] url değerini kontrol edin.';
+            } else if (r.status === 400 || r.status === 401) {
+              hint = 'Proxy kimlik doğrulaması başarısız (HMAC geçersiz). Uygulamanın doğru URL\'de çalıştığından emin olun.';
+            } else if (r.status === 503 || r.status === 502) {
+              hint = 'Uygulama sunucusuna ulaşılamıyor. Uygulamanın çalışır durumda olduğunu kontrol edin.';
+            } else {
+              hint = 'Proxy URL\'si "example.com" ise shopify.app.toml\'u gerçek URL ile güncelleyip tekrar deploy edin.';
+            }
+            throw new Error('HTTP ' + r.status + ': ' + hint);
+          });
+        }
+
+        return r.json().then(function (json) {
+          if (!r.ok) {
+            throw new Error(json.error || 'Sunucu hatası: HTTP ' + r.status);
+          }
+          return json;
+        });
+      })
+      .then(function (json) {
+        if (json.success) {
+          loyaltyData = json.data;
+          renderApp();
+        } else {
+          showError(json.error || 'Veri yüklenemedi.');
+        }
+      })
+      .catch(function (err) {
+        console.error('[Loyalty] Fetch failed:', err);
+        showError(err.message || 'Bağlantı hatası oluştu. Konsolu kontrol edin.');
+      });
+  }
+
+  function showError(msg) {
+    var app = document.getElementById('loyalty-app');
+    if (!app) return;
+    app.classList.remove('lp-app--loading');
+    app.innerHTML =
+      '<div style="padding:32px 24px;text-align:center;">' +
+        '<p style="color:var(--lp-text-sub);font-size:14px;line-height:1.6;margin:0 0 12px;">' +
+        escHtml(msg) +
+        '</p>' +
+        '<button onclick="window.location.reload()" style="' +
+          'padding:8px 18px;border-radius:8px;border:1px solid var(--lp-border);' +
+          'background:var(--lp-surface);color:var(--lp-text);font-size:13px;cursor:pointer;">' +
+          'Tekrar Dene' +
+        '</button>' +
+      '</div>';
+  }
+
+  // ── Render ─────────────────────────────────────────
+  function renderApp() {
+    var app = document.getElementById('loyalty-app');
+    if (!app) return;
+
+    // İstatistik değerleri
+    setText('lp-current-points', fmtPoints(loyaltyData.current_points));
+    setText('lp-total-earned',   fmtPoints(loyaltyData.total_earned_points));
+    setText('lp-total-spent',    fmtPoints(loyaltyData.total_spent_points));
+
+    // Dönüştür butonu
+    var convertBtn = document.getElementById('lp-open-convert');
+    if (convertBtn) {
+      if ((loyaltyData.current_points || 0) >= 1) {
+        convertBtn.removeAttribute('disabled');
+        convertBtn.removeAttribute('aria-disabled');
+      } else {
+        convertBtn.setAttribute('disabled', '');
+        convertBtn.setAttribute('aria-disabled', 'true');
+      }
+    }
+
+    renderCoupons();
+  }
+
+  function setText(id, text) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = text;
+  }
+
+  // ── Kupon Listesi ──────────────────────────────────
+  function renderCoupons() {
+    var list = document.getElementById('lp-coupons-list');
+    if (!list) return;
+
+    var now = Date.now();
+    var coupons = (loyaltyData.active_coupons || []).filter(function (c) {
+      return !c.used && new Date(c.expires_at).getTime() > now;
+    });
+
+    if (coupons.length === 0) {
+      var emptyText = list.dataset.empty ||
+        'Henüz aktif indirim kodunuz yok. Puanlarınızı kupona dönüştürerek alışverişlerinizde kullanabilirsiniz.';
+      list.innerHTML = '<p class="lp-empty">' + escHtml(emptyText) + '</p>';
+      return;
+    }
+
+    list.innerHTML = coupons
+      .map(function (c) {
+        return (
+          '<div class="lp-coupon-row">' +
+            '<span class="lp-coupon-code">' + escHtml(c.code) + '</span>' +
+            '<span class="lp-coupon-value">' + fmtCurrency(c.value) + ' İndirim</span>' +
+            '<span class="lp-coupon-timer" data-expires="' + escHtml(c.expires_at) + '">' +
+              timerIcon() +
+              '<span class="lp-countdown"></span>' +
+            '</span>' +
+            '<button class="lp-copy-btn" data-code="' + escHtml(c.code) + '" ' +
+              'title="Kodu Kopyala" aria-label="Kodu Kopyala">' +
+              copyIcon() +
+            '</button>' +
+          '</div>'
+        );
+      })
+      .join('');
+
+    // Kopyalama butonları
+    list.querySelectorAll('.lp-copy-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var code = btn.dataset.code;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(code).then(function () {
+            markCopied(btn);
+          });
+        } else {
+          // Fallback
+          var ta = document.createElement('textarea');
+          ta.value = code;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          ta.remove();
+          markCopied(btn);
+        }
+      });
+    });
+
+    startCountdowns();
+  }
+
+  function markCopied(btn) {
+    btn.classList.add('lp-copy-btn--copied');
+    btn.innerHTML = checkIcon();
+    setTimeout(function () {
+      btn.classList.remove('lp-copy-btn--copied');
+      btn.innerHTML = copyIcon();
+    }, 2000);
+    showToast('Kupon kodu kopyalandı!', 'success');
+  }
+
+  // ── Geri Sayım Sayaçları ───────────────────────────
+  var countdownInterval = null;
+
+  function startCountdowns() {
+    if (countdownInterval) clearInterval(countdownInterval);
+
+    function tick() {
+      var rows = document.querySelectorAll('.lp-coupon-timer[data-expires]');
+      var allDone = true;
+      rows.forEach(function (row) {
+        var diff = new Date(row.dataset.expires).getTime() - Date.now();
+        var countdown = row.querySelector('.lp-countdown');
+        if (!countdown) return;
+
+        if (diff <= 0) {
+          countdown.textContent = 'Süresi Doldu';
+          row.classList.add('lp-timer--urgent');
+          return;
+        }
+
+        allDone = false;
+        var d = Math.floor(diff / 86400000);
+        var h = Math.floor((diff % 86400000) / 3600000);
+        var m = Math.floor((diff % 3600000) / 60000);
+        var s = Math.floor((diff % 60000) / 1000);
+
+        var txt = d + 'G ' + pad(h) + 'S ' + pad(m) + 'D ' + pad(s) + 'S';
+        countdown.textContent = txt;
+
+        if (diff < 86400000) {
+          row.classList.add('lp-timer--urgent');
+        }
+      });
+      if (allDone) clearInterval(countdownInterval);
+    }
+
+    tick();
+    countdownInterval = setInterval(tick, 1000);
+  }
+
+  function pad(n) { return String(n).padStart(2, '0'); }
+
+  // ── Modal ──────────────────────────────────────────
+  var modal = document.getElementById('lp-modal');
+
+  document.getElementById('lp-open-convert').addEventListener('click', function () {
+    var pts = Math.floor(loyaltyData.current_points || 0);
+    document.getElementById('lp-modal-balance').textContent = fmtPoints(pts);
+    var input = document.getElementById('lp-convert-amount');
+    input.max = pts;
+    input.value = pts;
+    modal.hidden = false;
+    input.focus();
+  });
+
+  document.getElementById('lp-modal-cancel').addEventListener('click', closeModal);
+  document.getElementById('lp-modal-backdrop').addEventListener('click', closeModal);
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !modal.hidden) closeModal();
+  });
+
+  function closeModal() {
+    modal.hidden = true;
+  }
+
+  document.getElementById('lp-modal-confirm').addEventListener('click', function () {
+    var amount = parseInt(document.getElementById('lp-convert-amount').value, 10);
+    if (!amount || amount < 1) {
+      showToast('Lütfen geçerli bir miktar girin.', 'error');
+      return;
+    }
+    if (amount > Math.floor(loyaltyData.current_points || 0)) {
+      showToast('Yeterli puanınız bulunmamaktadır.', 'error');
+      return;
+    }
+
+    var confirmBtn = document.getElementById('lp-modal-confirm');
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Oluşturuluyor...';
+
+    fetch(FETCH_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+      body: JSON.stringify({ amount: amount }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (json) {
+        if (json.success) {
+          closeModal();
+          loyaltyData = null;
+          fetchData().then(function () {
+            showToast('Kupon oluşturuldu: ' + json.coupon.code, 'success');
+          });
+        } else {
+          showToast(json.error || 'Bir hata oluştu.', 'error');
+        }
+      })
+      .catch(function () { showToast('Bağlantı hatası.', 'error'); })
+      .finally(function () {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = CONFIRM_LABEL;
+      });
+  });
+
+  // ── SVG İkonlar ────────────────────────────────────
+  function copyIcon() {
+    return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+  }
+  function checkIcon() {
+    return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+  }
+  function timerIcon() {
+    return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+  }
+
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // ── Başlat ─────────────────────────────────────────
+  //
+  // Strateji:
+  //  1. Liquid'den gelen __LP__ verisiyle anında render et (proxy gerekmez)
+  //  2. Arka planda proxy'ye sessiz sync isteği gönder (siparişleri kredilendirmek için)
+  //     Bu istek başarısız olsa bile sayfa çalışmaya devam eder.
+
+  var DEFAULT_DATA = {
+    total_earned_points: 0,
+    total_spent_points: 0,
+    current_points: 0,
+    active_coupons: [],
+  };
+
+  function initFromLiquid() {
+    try {
+      loyaltyData = window.__LP__ || DEFAULT_DATA;
+    } catch (e) {
+      loyaltyData = DEFAULT_DATA;
+    }
+    renderApp();
+  }
+
+  function syncInBackground() {
+    fetch(FETCH_URL, {
+      headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+    })
+      .then(function (r) {
+        if (!r.ok) return null;
+        var ct = r.headers.get('content-type') || '';
+        if (!ct.includes('application/json')) return null;
+        return r.json();
+      })
+      .then(function (json) {
+        if (json && json.success && json.data) {
+          loyaltyData = json.data;
+          renderApp(); // Güncellenen veriyle sessizce yenile
+        }
+      })
+      .catch(function (err) {
+        // Arka plan sync başarısız — sorun değil, Liquid verisi zaten gösteriliyor
+        console.warn('[Loyalty] Background sync failed (harmless):', err.message);
+      });
+  }
+
+  // Önce Liquid verisini göster (anında, 0ms gecikme)
+  initFromLiquid();
+
+  // Sonra arka planda sync dene (yeni siparişleri kredilendirmek için)
+  syncInBackground();
+})();
+</script>
+
+{% schema %}
+{
+  "name": "Puanlarım",
+  "target": "section",
+  "settings": [
+    {
+      "type": "header",
+      "content": "Teknik Ayarlar"
+    },
+    {
+      "type": "text",
+      "id": "proxy_subpath",
+      "label": "App Proxy Alt Yolu",
+      "default": "loyalty",
+      "info": "shopify.app.toml dosyasındaki [app_proxy] subpath değeriyle aynı olmalı."
+    },
+    {
+      "type": "url",
+      "id": "api_url_override",
+      "label": "Doğrudan API URL (İsteğe Bağlı)",
+      "info": "Sadece App Proxy çalışmıyorsa kullanın. Uygulamanızın çalıştığı URL + /proxy. Örnek: https://sizin-app.fly.dev/proxy"
+    },
+    {
+      "type": "header",
+      "content": "Giriş Yapılmamış Ekranı"
+    },
+    {
+      "type": "text",
+      "id": "gate_title",
+      "label": "Başlık",
+      "default": "Sadakat Puanlarınız"
+    },
+    {
+      "type": "textarea",
+      "id": "gate_desc",
+      "label": "Açıklama",
+      "default": "Puanlarınızı görmek ve indirim koduna dönüştürmek için lütfen giriş yapın."
+    },
+    {
+      "type": "text",
+      "id": "gate_btn",
+      "label": "Giriş Butonu Metni",
+      "default": "Giriş Yap"
+    },
+    {
+      "type": "header",
+      "content": "Kart Etiketleri"
+    },
+    {
+      "type": "text",
+      "id": "label_current",
+      "label": "Mevcut Puan Kartı Başlığı",
+      "default": "Mevcut Puanım"
+    },
+    {
+      "type": "text",
+      "id": "label_current_sub",
+      "label": "Mevcut Puan Alt Metin",
+      "default": "Kupona Çevrilebilir"
+    },
+    {
+      "type": "text",
+      "id": "label_earned",
+      "label": "Toplam Kazanç Kartı Başlığı",
+      "default": "Toplam Kazancım"
+    },
+    {
+      "type": "text",
+      "id": "label_earned_sub",
+      "label": "Toplam Kazanç Alt Metin",
+      "default": "Bugüne kadar kazanılan"
+    },
+    {
+      "type": "text",
+      "id": "label_spent",
+      "label": "Harcanan Puan Kartı Başlığı",
+      "default": "Harcanan Puanım"
+    },
+    {
+      "type": "text",
+      "id": "label_spent_sub",
+      "label": "Harcanan Puan Alt Metin",
+      "default": "Kupona çevrildi"
+    },
+    {
+      "type": "header",
+      "content": "Buton ve Modal Metinleri"
+    },
+    {
+      "type": "text",
+      "id": "btn_convert",
+      "label": "Kupona Dönüştür Butonu",
+      "default": "Kupona Dönüştür"
+    },
+    {
+      "type": "text",
+      "id": "modal_title",
+      "label": "Modal Başlığı",
+      "default": "Kupona Dönüştür"
+    },
+    {
+      "type": "text",
+      "id": "modal_desc",
+      "label": "Modal Açıklaması",
+      "default": "Kaç puanınızı indirim koduna dönüştürmek istiyorsunuz?"
+    },
+    {
+      "type": "text",
+      "id": "modal_note",
+      "label": "Modal Not Metni",
+      "default": "1 puan = 1 TL indirim"
+    },
+    {
+      "type": "text",
+      "id": "modal_confirm",
+      "label": "Modal Onay Butonu",
+      "default": "Kuponu Oluştur"
+    },
+    {
+      "type": "header",
+      "content": "Kupon Listesi"
+    },
+    {
+      "type": "text",
+      "id": "coupons_title",
+      "label": "Kupon Bölümü Başlığı",
+      "default": "Aktif İndirim Kodlarım"
+    },
+    {
+      "type": "textarea",
+      "id": "coupons_empty",
+      "label": "Kupon Yokken Gösterilecek Metin",
+      "default": "Henüz aktif indirim kodunuz yok. Puanlarınızı kupona dönüştürerek alışverişlerinizde kullanabilirsiniz."
+    }
+  ]
+}
+{% endschema %}
