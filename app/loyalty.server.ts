@@ -109,7 +109,7 @@ export async function updateLoyaltyData(
  *
  * A sync is skipped if one was performed less than SYNC_INTERVAL_MS ago.
  */
-const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const SYNC_INTERVAL_MS = 60 * 1000; // 1 minute
 
 export async function syncCustomerOrders(
   graphql: GraphQLClient,
@@ -223,7 +223,7 @@ export async function createDiscountCode(
       variables: {
         input: {
           title: `Sadakat Kuponu - ${params.code}`,
-          codes: { add: [{ code: params.code }] },
+          code: params.code,
           startsAt: new Date().toISOString(),
           endsAt: params.expiresAt.toISOString(),
           customerSelection: {
@@ -236,7 +236,7 @@ export async function createDiscountCode(
                 appliesOnEachItem: false,
               },
             },
-            items: { allItems: true },
+            items: { all: true },
           },
           appliesOncePerCustomer: true,
           usageLimit: 1,
