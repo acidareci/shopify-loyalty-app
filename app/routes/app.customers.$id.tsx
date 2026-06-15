@@ -14,8 +14,12 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const numericId = params.id as string;
   const customerId = `gid://shopify/Customer/${numericId}`;
 
-  const [customerResponse, loyaltyData, shopEvents] = await Promise.all([
-    admin.graphql(
+  let customer = null;
+  let error: string | null = null;
+  let loyaltyData = await getLoyaltyData(admin.graphql, customerId).catch(() => null);
+
+  try {
+    const customerResponse = await admin.graphql(
       `#graphql
       query LoyaltyCustomer($id: ID!) {
         customer(id: $id) {
@@ -29,20 +33,37 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
         }
       }`,
       { variables: { id: customerId } }
-    ),
-    getLoyaltyData(admin.graphql, customerId),
-    db.loyaltyEvent.findMany({
-      where: { shop: session.shop, customerId: numericId },
-      orderBy: { createdAt: "desc" },
-      take: 50,
-    }),
-  ]);
+    );
 
-  const customerJson = await customerResponse.json();
-  const customer = customerJson?.data?.customer;
+    const customerJson: any = await customerResponse.json();
+    if (customerJson?.errors?.length) {
+      throw new Error(customerJson.errors[0]?.message || "GraphQL error");
+    }
+    customer = customerJson?.data?.customer ?? null;
+  } catch (err) {
+    console.error("Customer detail error:", err);
+    error = "Müşteri bilgileri yüklenemedi. Lütfen Protected Customer Data onayını kontrol edin.";
+  }
+
+  if (!loyaltyData) {
+    loyaltyData = {
+      total_earned_points: 0,
+      total_spent_points: 0,
+      current_points: 0,
+      active_coupons: [],
+      credited_order_ids: [],
+    };
+  }
+
+  const shopEvents = await db.loyaltyEvent.findMany({
+    where: { shop: session.shop, customerId: numericId },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
 
   return {
     numericId,
+    error,
     customer: customer
       ? {
           name: customer.displayName || "—",
@@ -109,7 +130,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 };
 
 export default function CustomerDetail() {
-  const { numericId, customer, loyaltyData, events } = useLoaderData<typeof loader>();
+  const { numericId, customer, loyaltyData, events, error } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
 
   const isSaving = fetcher.state !== "idle" && fetcher.formMethod === "POST";
@@ -122,31 +143,29 @@ export default function CustomerDetail() {
       new Date(iso)
     );
 
-  if (!customer) {
-    return (
-      <s-page heading="Müşteri bulunamadı">
-        <s-section>
-          <s-paragraph>
-            Müşteri bilgisi yüklenemedi. <Link to="/app/customers">Müşteri listesine dön</Link>
-          </s-paragraph>
-        </s-section>
-      </s-page>
-    );
-  }
-
   return (
-    <s-page heading={customer.name}>
-      <s-section heading="Müşteri Bilgileri">
-        <s-stack direction="inline" gap="base">
-          <InfoCard label="E-posta" value={customer.email} />
-          <InfoCard label="Telefon" value={customer.phone} />
-          <InfoCard label="Sipariş Sayısı" value={String(customer.numberOfOrders)} />
-          <InfoCard
-            label="Toplam Harcama"
-            value={`${fmt(parseFloat(customer.amountSpent))} ${customer.currency}`}
-          />
-        </s-stack>
-      </s-section>
+    <s-page heading={customer?.name ?? `Müşteri #${numericId}`}>
+      {error && (
+        <s-section>
+          <s-box padding="base" background="subdued" borderRadius="base">
+            <s-paragraph>{error}</s-paragraph>
+          </s-box>
+        </s-section>
+      )}
+
+      {customer && (
+        <s-section heading="Müşteri Bilgileri">
+          <s-stack direction="inline" gap="base">
+            <InfoCard label="E-posta" value={customer.email} />
+            <InfoCard label="Telefon" value={customer.phone} />
+            <InfoCard label="Sipariş Sayısı" value={String(customer.numberOfOrders)} />
+            <InfoCard
+              label="Toplam Harcama"
+              value={`${fmt(parseFloat(customer.amountSpent))} ${customer.currency}`}
+            />
+          </s-stack>
+        </s-section>
+      )}
 
       <s-section heading="Sadakat Puanları">
         <s-stack direction="inline" gap="base">

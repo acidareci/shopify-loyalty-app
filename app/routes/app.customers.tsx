@@ -19,70 +19,98 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
   const search = url.searchParams.get("q")?.trim() ?? "";
 
-  const response = await admin.graphql(
-    `#graphql
-    query LoyaltyCustomers($query: String) {
-      customers(first: 50, query: $query, sortKey: UPDATED_AT, reverse: true) {
-        edges {
-          node {
-            id
-            displayName
-            email
-            numberOfOrders
-            loyaltyData: metafield(namespace: "$app", key: "loyalty_data") {
-              value
+  let customers: CustomerRow[] = [];
+  let error: string | null = null;
+
+  try {
+    const response = await admin.graphql(
+      `#graphql
+      query LoyaltyCustomers($query: String) {
+        customers(first: 50, query: $query, sortKey: UPDATED_AT, reverse: true) {
+          edges {
+            node {
+              id
+              displayName
+              email
+              numberOfOrders
+              loyaltyData: metafield(namespace: "$app", key: "loyalty_data") {
+                value
+              }
             }
           }
         }
-      }
-    }`,
-    { variables: { query: search ? `email:*${search}* OR name:*${search}*` : null } }
-  );
+      }`,
+      { variables: { query: search ? `email:*${search}* OR name:*${search}*` : null } }
+    );
 
-  const json = await response.json();
-  const edges: Array<{
-    node: {
-      id: string;
-      displayName: string;
-      email: string | null;
-      numberOfOrders: number;
-      loyaltyData: { value: string } | null;
-    };
-  }> = json?.data?.customers?.edges ?? [];
+    const json: any = await response.json();
 
-  const customers: CustomerRow[] = edges.map(({ node }) => {
-    let currentPoints = 0;
-    let totalEarned = 0;
-    if (node.loyaltyData?.value) {
-      try {
-        const parsed = JSON.parse(node.loyaltyData.value);
-        currentPoints = parsed.current_points ?? 0;
-        totalEarned = parsed.total_earned_points ?? 0;
-      } catch {
-        // ignore malformed metafield
-      }
+    if (json?.errors?.length) {
+      throw new Error(json.errors[0]?.message || "GraphQL error");
     }
 
-    return {
-      id: node.id,
-      numericId: node.id.replace("gid://shopify/Customer/", ""),
-      name: node.displayName || "—",
-      email: node.email || "—",
-      numberOfOrders: node.numberOfOrders,
-      currentPoints,
-      totalEarned,
-    };
-  });
+    const edges: Array<{
+      node: {
+        id: string;
+        displayName: string;
+        email: string | null;
+        numberOfOrders: number;
+        loyaltyData: { value: string } | null;
+      };
+    }> = json?.data?.customers?.edges ?? [];
 
-  return { customers, search };
+    customers = edges.map(({ node }) => {
+      let currentPoints = 0;
+      let totalEarned = 0;
+      if (node.loyaltyData?.value) {
+        try {
+          const parsed = JSON.parse(node.loyaltyData.value);
+          currentPoints = parsed.current_points ?? 0;
+          totalEarned = parsed.total_earned_points ?? 0;
+        } catch {
+          // ignore malformed metafield
+        }
+      }
+
+      return {
+        id: node.id,
+        numericId: node.id.replace("gid://shopify/Customer/", ""),
+        name: node.displayName || "—",
+        email: node.email || "—",
+        numberOfOrders: node.numberOfOrders,
+        currentPoints,
+        totalEarned,
+      };
+    });
+  } catch (err) {
+    console.error("Customers list error:", err);
+    error =
+      "Müşteri listesi yüklenemedi. Bu özellik için Partner Dashboard'da " +
+      "'Protected Customer Data' onayının (müşteri listesi erişimi için Level 2) " +
+      "tamamlanmış olması gerekir.";
+  }
+
+  return { customers, search, error };
 };
 
 export default function CustomersList() {
-  const { customers, search } = useLoaderData<typeof loader>();
+  const { customers, search, error } = useLoaderData<typeof loader>();
   const [, setSearchParams] = useSearchParams();
 
   const fmt = (n: number) =>
     new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2 }).format(n);
+
+  if (error) {
+    return (
+      <s-page heading="Müşteriler">
+        <s-section heading="Sadakat Programındaki Müşteriler">
+          <s-box padding="base" background="subdued" borderRadius="base">
+            <s-paragraph>{error}</s-paragraph>
+          </s-box>
+        </s-section>
+      </s-page>
+    );
+  }
 
   return (
     <s-page heading="Müşteriler">
