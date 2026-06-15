@@ -48,7 +48,7 @@ description = "Customer loyalty points and active discount coupons"
   storefront = "public_read"
 
 [webhooks]
-api_version = "2026-07"
+api_version = "2025-10"
 
   [[webhooks.subscriptions]]
   uri = "/webhooks/app/uninstalled"
