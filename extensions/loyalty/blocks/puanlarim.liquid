@@ -42,15 +42,49 @@
     <!-- ── ANA UYGULAMA ── -->
     <div id="loyalty-app" class="lp-app" aria-live="polite">
 
-      <!-- İstatistik Kartları -->
-      <div class="lp-stats">
+      <!-- İstatistik Tablosu -->
+      <div class="lp-stats-table">
+        <div class="lp-stats-header">
+          <div class="lp-stats-h">
+            {% render 'lp-icon-medal' %}
+            <span>{{ block.settings.label_earned }}</span>
+          </div>
+          <div class="lp-stats-h">
+            <span>{{ block.settings.label_spent }}</span>
+          </div>
+          <div class="lp-stats-h">
+            {% render 'lp-icon-medal' %}
+            <span>{{ block.settings.label_current }}</span>
+          </div>
+        </div>
+        <div class="lp-stats-values">
+          <div class="lp-stats-v">
+            <span id="lp-total-earned" class="lp-skeleton lp-skeleton--value"></span>
+            {% render 'lp-icon-coin' %}
+          </div>
+          <div class="lp-stats-v lp-stats-v--muted">
+            <span id="lp-total-spent" class="lp-skeleton lp-skeleton--value"></span>
+            {% render 'lp-icon-coin' %}
+          </div>
+          <div class="lp-stats-v lp-stats-v--accent">
+            <span id="lp-current-points" class="lp-skeleton lp-skeleton--value"></span>
+            {% render 'lp-icon-coin' %}
+          </div>
+        </div>
+      </div>
 
-        <div class="lp-card lp-card--primary">
-          <p class="lp-card__label">{{ block.settings.label_current }}</p>
-          <p class="lp-card__value" id="lp-current-points">—</p>
-          <p class="lp-card__sub">{{ block.settings.label_current_sub }}</p>
+      <!-- İndirim Kuponu Oluştur -->
+      <div class="lp-create">
+        <div class="lp-create__info">
+          <h3 class="lp-create__title">
+            {% render 'lp-icon-ticket' %}
+            {{ block.settings.create_title }}
+          </h3>
+          <p class="lp-create__desc">{{ block.settings.create_desc }}</p>
+        </div>
+        <div class="lp-create__action">
           <button
-            class="lp-btn lp-btn--primary"
+            class="lp-btn lp-btn--primary lp-btn--create"
             id="lp-open-convert"
             disabled
             aria-disabled="true"
@@ -58,24 +92,21 @@
           >
             {{ block.settings.btn_convert }}
           </button>
+          <div class="lp-code-display" id="lp-code-display">
+            <span class="lp-code-display__value" id="lp-code-display-value">— — — — — — — —</span>
+            <button class="lp-copy-btn" id="lp-copy-generated" hidden title="Kodu Kopyala" aria-label="Kodu Kopyala">
+              {% render 'lp-icon-copy' %}
+            </button>
+          </div>
         </div>
-
-        <div class="lp-card">
-          <p class="lp-card__label">{{ block.settings.label_earned }}</p>
-          <p class="lp-card__value" id="lp-total-earned">—</p>
-          <p class="lp-card__sub">{{ block.settings.label_earned_sub }}</p>
+        <div class="lp-create__note">
+          {% render 'lp-icon-info' %}
+          <span>{{ block.settings.create_note }}</span>
         </div>
-
-        <div class="lp-card">
-          <p class="lp-card__label">{{ block.settings.label_spent }}</p>
-          <p class="lp-card__value" id="lp-total-spent">—</p>
-          <p class="lp-card__sub">{{ block.settings.label_spent_sub }}</p>
-        </div>
-
       </div>
 
       <!-- Kupon Dönüştür Modal -->
-        <div
+      <div
         id="lp-modal"
         class="lp-modal"
         role="dialog"
@@ -115,9 +146,12 @@
         </div>
       </div>
 
-      <!-- Aktif İndirim Kodları -->
-      <div class="lp-coupons">
-        <h3 class="lp-coupons__title">{{ block.settings.coupons_title }}</h3>
+      <!-- Geçmiş Kuponlarım -->
+      <div class="lp-history">
+        <h3 class="lp-history__title">
+          {% render 'lp-icon-history' %}
+          {{ block.settings.coupons_title }}
+        </h3>
         <div id="lp-coupons-list" data-empty="{{ block.settings.coupons_empty | escape }}"></div>
       </div>
 
@@ -146,6 +180,19 @@
     --lp-shadow: 0 2px 16px rgba(0,0,0,.07), 0 1px 3px rgba(0,0,0,.06);
     --lp-shadow-hover: 0 8px 32px rgba(0,0,0,.12), 0 2px 8px rgba(0,0,0,.08);
     --lp-transition: 0.2s ease;
+
+    /* ── Kutu Oyunu AI tema renkleri ── */
+    --lp-green: #dfe9d8;
+    --lp-green-text: #355a3c;
+    --lp-cream: #fbf2de;
+    --lp-cream-border: #f1e1bf;
+    --lp-teal: #2f5c56;
+    --lp-teal-dark: #244a45;
+    --lp-orange: #efa23c;
+    --lp-status-active: #3fa56b;
+    --lp-status-used: #efa23c;
+    --lp-status-expired: #9a9a9a;
+
     font-family: inherit;
     color: var(--lp-text);
   }
@@ -207,13 +254,14 @@
     outline: none;
     transition: opacity var(--lp-transition), transform var(--lp-transition), box-shadow var(--lp-transition);
     text-decoration: none;
+    white-space: nowrap;
   }
   .lp-btn--primary {
-    background: var(--lp-accent);
-    color: var(--lp-accent-text);
+    background: var(--lp-teal);
+    color: #fff;
   }
   .lp-btn--primary:hover:not(:disabled) {
-    opacity: .88;
+    opacity: .9;
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(0,0,0,.15);
   }
@@ -234,62 +282,154 @@
     border-radius: 10px;
   }
   .lp-btn:disabled {
-    opacity: .35;
+    opacity: .4;
     cursor: not-allowed;
+  }
+  .lp-btn--create {
+    padding: 13px 22px;
+    border-radius: 10px;
+    font-size: 14px;
+    flex-shrink: 0;
   }
 
   /* ── Ana Uygulama ── */
-  .lp-app { padding: 8px 0 24px; }
-
-  .lp-stats {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 16px;
-    margin-bottom: 32px;
-  }
-
-  /* ── Kartlar ── */
-  .lp-card {
-    background: var(--lp-bg);
-    border: 1px solid var(--lp-border);
+  .lp-app {
+    padding: 24px;
+    background: var(--lp-cream);
+    border: 1px solid var(--lp-cream-border);
     border-radius: var(--lp-radius);
-    box-shadow: var(--lp-shadow);
-    padding: 28px 24px;
-    transition: box-shadow var(--lp-transition), transform var(--lp-transition);
   }
-  .lp-card:hover {
-    box-shadow: var(--lp-shadow-hover);
-    transform: translateY(-2px);
+
+  /* ── İstatistik Tablosu ── */
+  .lp-stats-table {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    border: 1px solid var(--lp-cream-border);
+    border-radius: var(--lp-radius-sm);
+    overflow: hidden;
+    margin-bottom: 24px;
+    background: var(--lp-bg);
   }
-  .lp-card--primary {
-    background: var(--lp-accent);
-    border-color: transparent;
-    color: var(--lp-accent-text);
+  .lp-stats-header,
+  .lp-stats-values {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-column: 1 / -1;
   }
-  .lp-card--primary .lp-card__label,
-  .lp-card--primary .lp-card__sub {
-    color: color-mix(in srgb, var(--lp-accent-text) 70%, transparent);
+
+  .lp-stats-h {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 14px 12px;
+    background: var(--lp-green);
+    color: var(--lp-green-text);
+    font-size: 13px;
+    font-weight: 700;
+    text-align: center;
+    border-right: 1px solid var(--lp-cream-border);
+    border-bottom: 1px solid var(--lp-cream-border);
   }
-  .lp-card__label {
-    margin: 0 0 8px;
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: .06em;
-    color: var(--lp-text-sub);
-  }
-  .lp-card__value {
-    margin: 0 0 4px;
-    font-size: 36px;
+  .lp-stats-h svg { flex-shrink: 0; width: 18px; height: 18px; }
+  .lp-stats-header .lp-stats-h:last-child { border-right: none; }
+
+  .lp-stats-v {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 22px 12px;
+    background: var(--lp-cream);
+    font-size: 26px;
     font-weight: 800;
-    line-height: 1.1;
-    letter-spacing: -.02em;
+    color: var(--lp-text);
+    border-right: 1px solid var(--lp-cream-border);
   }
-  .lp-card__sub {
-    margin: 0 0 20px;
+  .lp-stats-values .lp-stats-v:last-child { border-right: none; }
+  .lp-stats-v svg { flex-shrink: 0; width: 22px; height: 22px; }
+  .lp-stats-v--muted {
+    color: var(--lp-text-sub);
+    text-decoration: line-through;
+  }
+  .lp-stats-v--accent { color: var(--lp-teal); }
+
+  /* ── İndirim Kuponu Oluştur ── */
+  .lp-create {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 16px 24px;
+    background: var(--lp-bg);
+    border: 1px solid var(--lp-cream-border);
+    border-radius: var(--lp-radius-sm);
+    padding: 22px 24px;
+    margin-bottom: 18px;
+  }
+  .lp-create__title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 8px;
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--lp-teal);
+  }
+  .lp-create__title svg { flex-shrink: 0; width: 22px; height: 22px; color: var(--lp-orange); }
+  .lp-create__desc {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--lp-text-sub);
+    max-width: 480px;
+  }
+  .lp-create__action {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .lp-code-display {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-width: 180px;
+    padding: 11px 16px;
+    background: var(--lp-teal);
+    color: #fff;
+    border-radius: var(--lp-radius-sm);
+  }
+  .lp-code-display__value {
+    font-family: ui-monospace, 'Cascadia Code', 'Courier New', monospace;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: .1em;
+    color: rgba(255,255,255,.6);
+  }
+  .lp-code-display--filled .lp-code-display__value { color: #fff; }
+  .lp-code-display .lp-copy-btn {
+    border-color: rgba(255,255,255,.3);
+    background: rgba(255,255,255,.12);
+    color: #fff;
+  }
+  .lp-code-display .lp-copy-btn:hover { background: rgba(255,255,255,.22); }
+
+  .lp-create__note {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 16px;
+    background: var(--lp-surface);
+    border-radius: var(--lp-radius-sm);
     font-size: 12px;
+    line-height: 1.6;
     color: var(--lp-text-sub);
   }
+  .lp-create__note svg { flex-shrink: 0; width: 16px; height: 16px; margin-top: 1px; }
+  .lp-create__note strong { color: var(--lp-text); }
 
   /* ── Skeleton Loading ── */
   @keyframes lp-shimmer {
@@ -303,9 +443,8 @@
     background-size: 400px 100%;
     animation: lp-shimmer 1.4s ease infinite;
   }
-  .lp-skeleton--value  { width: 100px; height: 36px; }
+  .lp-skeleton--value  { width: 70px; height: 30px; }
   .lp-skeleton--code   { width: 140px; height: 18px; }
-  .lp-skeleton--timer  { width: 160px; height: 14px; }
 
   /* ── Modal ── */
   .lp-modal {
@@ -381,57 +520,95 @@
     transition: border-color var(--lp-transition), box-shadow var(--lp-transition);
   }
   .lp-input:focus {
-    border-color: var(--lp-accent);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--lp-accent) 18%, transparent);
+    border-color: var(--lp-teal);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--lp-teal) 18%, transparent);
   }
 
-  /* ── Kupon Listesi ── */
-  .lp-coupons__title {
+  /* ── Geçmiş Kuponlarım ── */
+  .lp-history__title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
     margin: 0 0 14px;
     font-size: 16px;
     font-weight: 700;
+    color: var(--lp-teal);
   }
-  #lp-coupons-list { display: flex; flex-direction: column; gap: 10px; }
+  .lp-history__title svg { flex-shrink: 0; width: 20px; height: 20px; color: var(--lp-orange); }
+  #lp-coupons-list { display: flex; flex-direction: column; gap: 12px; }
 
   .lp-coupon-row {
     display: grid;
     grid-template-columns: auto 1fr auto auto;
     align-items: center;
-    gap: 12px 16px;
-    background: var(--lp-bg);
-    border: 1px solid var(--lp-border);
+    gap: 12px 20px;
+    background: var(--lp-teal);
+    color: #fff;
     border-radius: var(--lp-radius-sm);
-    box-shadow: var(--lp-shadow);
-    padding: 16px 20px;
+    padding: 18px 22px;
     transition: box-shadow var(--lp-transition);
   }
   .lp-coupon-row:hover { box-shadow: var(--lp-shadow-hover); }
-  .lp-coupon-row--skeleton { pointer-events: none; }
+  .lp-coupon-row--skeleton { pointer-events: none; opacity: .6; }
 
-  .lp-coupon-code {
-    font-family: ui-monospace, 'Cascadia Code', 'Courier New', monospace;
+  .lp-coupon-points {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 22px;
+    font-weight: 800;
+  }
+  .lp-coupon-points svg { flex-shrink: 0; width: 22px; height: 22px; color: var(--lp-orange); }
+
+  .lp-coupon-mid {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    font-size: 13px;
+    color: rgba(255,255,255,.75);
+  }
+  .lp-coupon-mid strong {
     font-size: 15px;
     font-weight: 700;
-    letter-spacing: .05em;
-    color: var(--lp-text);
+    color: #fff;
   }
-  .lp-coupon-value {
+  .lp-coupon-code {
+    font-family: ui-monospace, 'Cascadia Code', 'Courier New', monospace;
     font-size: 13px;
-    font-weight: 600;
-    color: var(--lp-text-sub);
+    font-weight: 700;
+    letter-spacing: .04em;
+    color: #fff;
+    background: rgba(255,255,255,.12);
+    padding: 3px 8px;
+    border-radius: 6px;
   }
 
-  .lp-coupon-timer {
+  .lp-coupon-date {
     display: flex;
     align-items: center;
     gap: 6px;
     font-size: 12px;
-    font-weight: 600;
-    color: var(--lp-text-sub);
+    font-weight: 500;
+    color: rgba(255,255,255,.7);
     white-space: nowrap;
   }
-  .lp-coupon-timer svg { flex-shrink: 0; }
-  .lp-timer--urgent { color: #e8330a; }
+  .lp-coupon-date svg { flex-shrink: 0; width: 14px; height: 14px; }
+
+  .lp-coupon-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: 99px;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .lp-coupon-status svg { width: 14px; height: 14px; }
+  .lp-status--active  { background: var(--lp-status-active); color: #fff; }
+  .lp-status--used    { background: var(--lp-status-used); color: #fff; }
+  .lp-status--expired { background: var(--lp-status-expired); color: #fff; }
 
   .lp-copy-btn {
     display: inline-flex;
@@ -449,9 +626,9 @@
   }
   .lp-copy-btn:hover { background: var(--lp-border); color: var(--lp-text); }
   .lp-copy-btn--copied {
-    background: #16a34a;
-    border-color: #16a34a;
-    color: #fff;
+    background: #16a34a !important;
+    border-color: #16a34a !important;
+    color: #fff !important;
   }
 
   .lp-empty {
@@ -459,9 +636,9 @@
     padding: 40px 20px;
     color: var(--lp-text-sub);
     font-size: 14px;
-    background: var(--lp-surface);
+    background: var(--lp-bg);
     border-radius: var(--lp-radius-sm);
-    border: 1px dashed var(--lp-border);
+    border: 1px dashed var(--lp-cream-border);
   }
 
   /* ── Toast ── */
@@ -489,19 +666,28 @@
   }
   .lp-toast--success { background: #16a34a; color: #fff; }
   .lp-toast--error   { background: #dc2626; color: #fff; }
-  .lp-toast--info    { background: var(--lp-accent); color: var(--lp-accent-text); }
+  .lp-toast--info    { background: var(--lp-teal); color: #fff; }
 
-  /* ── Loading ── */
-  .lp-app--loading .lp-card__value { min-height: 36px; }
+  @media (max-width: 720px) {
+    .lp-stats-table { grid-template-columns: 1fr; }
+    .lp-stats-header, .lp-stats-values { grid-template-columns: 1fr; }
+    .lp-stats-h, .lp-stats-v {
+      border-right: none;
+      border-bottom: 1px solid var(--lp-cream-border);
+    }
+    .lp-stats-values .lp-stats-v:last-child,
+    .lp-stats-header .lp-stats-h:last-child { border-bottom: none; }
 
-  @media (max-width: 640px) {
-    .lp-stats { grid-template-columns: 1fr; }
+    .lp-create { grid-template-columns: 1fr; }
+    .lp-create__action { justify-content: stretch; }
+    .lp-create__action .lp-btn--create { width: 100%; }
+    .lp-code-display { width: 100%; }
+
     .lp-coupon-row {
       grid-template-columns: 1fr auto;
-      grid-template-rows: auto auto;
+      grid-template-rows: auto auto auto;
     }
-    .lp-coupon-timer { grid-column: 1; }
-    .lp-coupon-value { text-align: right; }
+    .lp-coupon-mid { grid-column: 1 / -1; order: 3; }
     .lp-gate__card { padding: 36px 24px; }
   }
 </style>
@@ -534,9 +720,13 @@
     return new Intl.NumberFormat('tr-TR', {
       style: 'currency',
       currency: 'TRY',
-      minimumFractionDigits: 0,
+      minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(Number(n) || 0);
+  }
+
+  function fmtDate(iso) {
+    return new Intl.DateTimeFormat('tr-TR', { dateStyle: 'short' }).format(new Date(iso));
   }
 
   function showToast(msg, type) {
@@ -563,14 +753,12 @@
    */
   function fetchData() {
     var url = FETCH_URL;
-    console.log('[Loyalty] Fetching from:', url);
 
     return fetch(url, {
       headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
     })
       .then(function (r) {
         var ct = r.headers.get('content-type') || '';
-        console.log('[Loyalty] Response status:', r.status, 'Content-Type:', ct);
 
         // Server returned non-JSON (likely HTML error page or proxy misconfiguration)
         if (!ct.includes('application/json')) {
@@ -614,7 +802,6 @@
   function showError(msg) {
     var app = document.getElementById('loyalty-app');
     if (!app) return;
-    app.classList.remove('lp-app--loading');
     app.innerHTML =
       '<div style="padding:32px 24px;text-align:center;">' +
         '<p style="color:var(--lp-text-sub);font-size:14px;line-height:1.6;margin:0 0 12px;">' +
@@ -622,7 +809,7 @@
         '</p>' +
         '<button onclick="window.location.reload()" style="' +
           'padding:8px 18px;border-radius:8px;border:1px solid var(--lp-border);' +
-          'background:var(--lp-surface);color:var(--lp-text);font-size:13px;cursor:pointer;">' +
+          'background:var(--lp-bg);color:var(--lp-text);font-size:13px;cursor:pointer;">' +
           'Tekrar Dene' +
         '</button>' +
       '</div>';
@@ -634,9 +821,9 @@
     if (!app) return;
 
     // İstatistik değerleri
-    setText('lp-current-points', fmtPoints(loyaltyData.current_points));
     setText('lp-total-earned',   fmtPoints(loyaltyData.total_earned_points));
     setText('lp-total-spent',    fmtPoints(loyaltyData.total_spent_points));
+    setText('lp-current-points', fmtPoints(loyaltyData.current_points));
 
     // Dönüştür butonu
     var convertBtn = document.getElementById('lp-open-convert');
@@ -655,18 +842,18 @@
 
   function setText(id, text) {
     var el = document.getElementById(id);
-    if (el) el.textContent = text;
+    if (!el) return;
+    el.textContent = text;
+    el.classList.remove('lp-skeleton', 'lp-skeleton--value');
   }
 
-  // ── Kupon Listesi ──────────────────────────────────
+  // ── Geçmiş Kuponlarım ──────────────────────────────
   function renderCoupons() {
     var list = document.getElementById('lp-coupons-list');
     if (!list) return;
 
     var now = Date.now();
-    var coupons = (loyaltyData.active_coupons || []).filter(function (c) {
-      return !c.used && new Date(c.expires_at).getTime() > now;
-    });
+    var coupons = loyaltyData.coupons || loyaltyData.active_coupons || [];
 
     if (coupons.length === 0) {
       var emptyText = list.dataset.empty ||
@@ -677,100 +864,36 @@
 
     list.innerHTML = coupons
       .map(function (c) {
+        var expired = new Date(c.expires_at).getTime() <= now;
+        var statusClass, statusLabel;
+        if (c.used) {
+          statusClass = 'lp-status--used';
+          statusLabel = 'Kullanıldı';
+        } else if (expired) {
+          statusClass = 'lp-status--expired';
+          statusLabel = 'Süresi Doldu';
+        } else {
+          statusClass = 'lp-status--active';
+          statusLabel = 'Aktif';
+        }
+
         return (
           '<div class="lp-coupon-row">' +
-            '<span class="lp-coupon-code">' + escHtml(c.code) + '</span>' +
-            '<span class="lp-coupon-value">' + fmtCurrency(c.value) + ' İndirim</span>' +
-            '<span class="lp-coupon-timer" data-expires="' + escHtml(c.expires_at) + '">' +
-              timerIcon() +
-              '<span class="lp-countdown"></span>' +
+            '<div class="lp-coupon-points">' + medalIcon() + fmtPoints(c.value) + '</div>' +
+            '<div class="lp-coupon-mid">' +
+              '<span class="lp-coupon-code">' + escHtml(c.code) + '</span>' +
+              '<span>Kupon Tutarı: <strong>' + fmtCurrency(c.value) + '</strong></span>' +
+            '</div>' +
+            '<div class="lp-coupon-date">' + infoIcon() + 'Oluşturulma Tarihi: ' + fmtDate(c.created_at) + '</div>' +
+            '<span class="lp-coupon-status ' + statusClass + '">' +
+              (statusLabel === 'Aktif' ? checkIcon() : '') +
+              statusLabel +
             '</span>' +
-            '<button class="lp-copy-btn" data-code="' + escHtml(c.code) + '" ' +
-              'title="Kodu Kopyala" aria-label="Kodu Kopyala">' +
-              copyIcon() +
-            '</button>' +
           '</div>'
         );
       })
       .join('');
-
-    // Kopyalama butonları
-    list.querySelectorAll('.lp-copy-btn').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var code = btn.dataset.code;
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(code).then(function () {
-            markCopied(btn);
-          });
-        } else {
-          // Fallback
-          var ta = document.createElement('textarea');
-          ta.value = code;
-          ta.style.position = 'fixed';
-          ta.style.opacity = '0';
-          document.body.appendChild(ta);
-          ta.select();
-          document.execCommand('copy');
-          ta.remove();
-          markCopied(btn);
-        }
-      });
-    });
-
-    startCountdowns();
   }
-
-  function markCopied(btn) {
-    btn.classList.add('lp-copy-btn--copied');
-    btn.innerHTML = checkIcon();
-    setTimeout(function () {
-      btn.classList.remove('lp-copy-btn--copied');
-      btn.innerHTML = copyIcon();
-    }, 2000);
-    showToast('Kupon kodu kopyalandı!', 'success');
-  }
-
-  // ── Geri Sayım Sayaçları ───────────────────────────
-  var countdownInterval = null;
-
-  function startCountdowns() {
-    if (countdownInterval) clearInterval(countdownInterval);
-
-    function tick() {
-      var rows = document.querySelectorAll('.lp-coupon-timer[data-expires]');
-      var allDone = true;
-      rows.forEach(function (row) {
-        var diff = new Date(row.dataset.expires).getTime() - Date.now();
-        var countdown = row.querySelector('.lp-countdown');
-        if (!countdown) return;
-
-        if (diff <= 0) {
-          countdown.textContent = 'Süresi Doldu';
-          row.classList.add('lp-timer--urgent');
-          return;
-        }
-
-        allDone = false;
-        var d = Math.floor(diff / 86400000);
-        var h = Math.floor((diff % 86400000) / 3600000);
-        var m = Math.floor((diff % 3600000) / 60000);
-        var s = Math.floor((diff % 60000) / 1000);
-
-        var txt = d + 'G ' + pad(h) + 'S ' + pad(m) + 'D ' + pad(s) + 'S';
-        countdown.textContent = txt;
-
-        if (diff < 86400000) {
-          row.classList.add('lp-timer--urgent');
-        }
-      });
-      if (allDone) clearInterval(countdownInterval);
-    }
-
-    tick();
-    countdownInterval = setInterval(tick, 1000);
-  }
-
-  function pad(n) { return String(n).padStart(2, '0'); }
 
   // ── Modal ──────────────────────────────────────────
   var modal = document.getElementById('lp-modal');
@@ -820,6 +943,7 @@
       .then(function (json) {
         if (json.success) {
           closeModal();
+          showGeneratedCode(json.coupon.code);
           loyaltyData = null;
           fetchData().then(function () {
             showToast('Kupon oluşturuldu: ' + json.coupon.code, 'success');
@@ -835,6 +959,53 @@
       });
   });
 
+  // ── Oluşturulan Kod Gösterimi ──────────────────────
+  function showGeneratedCode(code) {
+    var display = document.getElementById('lp-code-display');
+    var valueEl = document.getElementById('lp-code-display-value');
+    var copyBtn = document.getElementById('lp-copy-generated');
+    if (!display || !valueEl || !copyBtn) return;
+
+    valueEl.textContent = code;
+    display.classList.add('lp-code-display--filled');
+    copyBtn.hidden = false;
+    copyBtn.dataset.code = code;
+  }
+
+  document.getElementById('lp-copy-generated').addEventListener('click', function (e) {
+    var btn = e.currentTarget;
+    var code = btn.dataset.code;
+    if (!code) return;
+    copyToClipboard(code, btn);
+  });
+
+  function copyToClipboard(code, btn) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(code).then(function () { markCopied(btn); });
+    } else {
+      var ta = document.createElement('textarea');
+      ta.value = code;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+      markCopied(btn);
+    }
+  }
+
+  function markCopied(btn) {
+    var original = btn.innerHTML;
+    btn.classList.add('lp-copy-btn--copied');
+    btn.innerHTML = checkIcon();
+    setTimeout(function () {
+      btn.classList.remove('lp-copy-btn--copied');
+      btn.innerHTML = original;
+    }, 2000);
+    showToast('Kupon kodu kopyalandı!', 'success');
+  }
+
   // ── SVG İkonlar ────────────────────────────────────
   function copyIcon() {
     return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
@@ -842,8 +1013,11 @@
   function checkIcon() {
     return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
   }
-  function timerIcon() {
-    return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+  function infoIcon() {
+    return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>';
+  }
+  function medalIcon() {
+    return '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.5 13.5 17 22l-5-3-5 3 1.5-8.5"/></svg>';
   }
 
   function escHtml(str) {
@@ -865,12 +1039,14 @@
     total_earned_points: 0,
     total_spent_points: 0,
     current_points: 0,
+    coupons: [],
     active_coupons: [],
   };
 
   function initFromLiquid() {
     try {
       loyaltyData = window.__LP__ || DEFAULT_DATA;
+      loyaltyData.coupons = loyaltyData.coupons || loyaltyData.active_coupons || [];
     } catch (e) {
       loyaltyData = DEFAULT_DATA;
     }
@@ -953,53 +1129,57 @@
     },
     {
       "type": "header",
-      "content": "Kart Etiketleri"
-    },
-    {
-      "type": "text",
-      "id": "label_current",
-      "label": "Mevcut Puan Kartı Başlığı",
-      "default": "Mevcut Puanım"
-    },
-    {
-      "type": "text",
-      "id": "label_current_sub",
-      "label": "Mevcut Puan Alt Metin",
-      "default": "Kupona Çevrilebilir"
+      "content": "İstatistik Tablosu Başlıkları"
     },
     {
       "type": "text",
       "id": "label_earned",
-      "label": "Toplam Kazanç Kartı Başlığı",
-      "default": "Toplam Kazancım"
-    },
-    {
-      "type": "text",
-      "id": "label_earned_sub",
-      "label": "Toplam Kazanç Alt Metin",
-      "default": "Bugüne kadar kazanılan"
+      "label": "Toplam Puan Başlığı",
+      "default": "Toplam Puan"
     },
     {
       "type": "text",
       "id": "label_spent",
-      "label": "Harcanan Puan Kartı Başlığı",
-      "default": "Harcanan Puanım"
+      "label": "Kupona Çevrilen Başlığı",
+      "default": "Kupona Çevrilen"
     },
     {
       "type": "text",
-      "id": "label_spent_sub",
-      "label": "Harcanan Puan Alt Metin",
-      "default": "Kupona çevrildi"
+      "id": "label_current",
+      "label": "Kalan Puan Başlığı",
+      "default": "Kalan Puan"
     },
     {
       "type": "header",
-      "content": "Buton ve Modal Metinleri"
+      "content": "İndirim Kuponu Oluştur"
+    },
+    {
+      "type": "text",
+      "id": "create_title",
+      "label": "Başlık",
+      "default": "İndirim Kuponu Oluştur"
+    },
+    {
+      "type": "textarea",
+      "id": "create_desc",
+      "label": "Açıklama",
+      "default": "Oluşturacağınız indirim kupon kodunu kopyalayıp, satın alacağınız ürünlerin ödeme sayfasında kullanabilirsiniz."
     },
     {
       "type": "text",
       "id": "btn_convert",
-      "label": "Kupona Dönüştür Butonu",
-      "default": "Kupona Dönüştür"
+      "label": "Buton Metni",
+      "default": "İndirim Kodu Oluştur"
+    },
+    {
+      "type": "textarea",
+      "id": "create_note",
+      "label": "Bilgi Notu",
+      "default": "Oluşturulan indirim kodları yalnızca bu mağazada geçerlidir. İndirim kuponlarının geçerlilik süresi, oluşturulduğu günden itibaren 1 Aydır."
+    },
+    {
+      "type": "header",
+      "content": "Kupon Dönüştürme Modalı"
     },
     {
       "type": "text",
@@ -1027,19 +1207,19 @@
     },
     {
       "type": "header",
-      "content": "Kupon Listesi"
+      "content": "Geçmiş Kuponlarım"
     },
     {
       "type": "text",
       "id": "coupons_title",
-      "label": "Kupon Bölümü Başlığı",
-      "default": "Aktif İndirim Kodlarım"
+      "label": "Bölüm Başlığı",
+      "default": "Geçmiş Kuponlarım"
     },
     {
       "type": "textarea",
       "id": "coupons_empty",
       "label": "Kupon Yokken Gösterilecek Metin",
-      "default": "Henüz aktif indirim kodunuz yok. Puanlarınızı kupona dönüştürerek alışverişlerinizde kullanabilirsiniz."
+      "default": "Henüz hiç indirim kodunuz yok. Puanlarınızı kupona dönüştürerek alışverişlerinizde kullanabilirsiniz."
     }
   ]
 }

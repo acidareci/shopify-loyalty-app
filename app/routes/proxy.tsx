@@ -136,10 +136,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     );
   }
 
-  // Strip expired / used coupons from the storefront response
-  const now = new Date();
-  const activeCoupons = loyaltyData.active_coupons.filter(
-    (c) => !c.used && new Date(c.expires_at) > now
+  // Return full coupon history (active, used and expired), newest first
+  const coupons = [...loyaltyData.active_coupons].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
 
   return Response.json(
@@ -149,7 +148,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         total_earned_points: loyaltyData.total_earned_points,
         total_spent_points: loyaltyData.total_spent_points,
         current_points: loyaltyData.current_points,
-        active_coupons: activeCoupons,
+        coupons,
       },
     },
     { headers: corsHeaders() }
