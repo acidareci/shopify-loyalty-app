@@ -225,12 +225,24 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-  const discountResult = await createDiscountCode(client.gql, {
-    customerId: customerIdRaw,
-    code,
-    amount,
-    expiresAt,
-  });
+  let discountResult;
+  try {
+    discountResult = await createDiscountCode(client.gql, {
+      customerId: customerIdRaw,
+      code,
+      amount,
+      expiresAt,
+    });
+  } catch (error) {
+    console.error("Loyalty proxy createDiscountCode error:", error);
+    return Response.json(
+      {
+        success: false,
+        error: "Kupon oluşturulamadı. Lütfen mağaza yöneticisine başvurun.",
+      },
+      { status: 502, headers: corsHeaders() }
+    );
+  }
 
   if (!discountResult.success) {
     return Response.json(
@@ -253,7 +265,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   loyaltyData.current_points = loyaltyData.current_points - amount;
   loyaltyData.active_coupons = [...(loyaltyData.active_coupons || []), coupon];
 
-  await updateLoyaltyData(client.gql, customerIdRaw, loyaltyData);
+  try {
+    await updateLoyaltyData(client.gql, customerIdRaw, loyaltyData);
+  } catch (error) {
+    console.error("Loyalty proxy updateLoyaltyData error:", error);
+    return Response.json(
+      {
+        success: false,
+        error: "Kupon oluşturuldu fakat puanlar güncellenemedi. Lütfen sayfayı yenileyin.",
+      },
+      { status: 502, headers: corsHeaders() }
+    );
+  }
 
   await db.loyaltyEvent.create({
     data: {
