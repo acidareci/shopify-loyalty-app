@@ -107,20 +107,33 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   });
   const pointsRate = settings?.pointsRate ?? 0.03;
 
-  const loyaltyData = await getLoyaltyData(client.gql, customerIdRaw);
+  let loyaltyData;
+  try {
+    loyaltyData = await getLoyaltyData(client.gql, customerIdRaw);
 
-  // On-demand sync: credit any new paid orders (replaces orders/paid webhook)
-  const syncResult = await syncCustomerOrders(
-    client.gql,
-    customerIdRaw,
-    loyaltyData,
-    db,
-    client.shop,
-    pointsRate
-  );
+    // On-demand sync: credit any new paid orders (replaces orders/paid webhook)
+    const syncResult = await syncCustomerOrders(
+      client.gql,
+      customerIdRaw,
+      loyaltyData,
+      db,
+      client.shop,
+      pointsRate
+    );
 
-  if (syncResult.updated) {
-    await updateLoyaltyData(client.gql, customerIdRaw, loyaltyData);
+    if (syncResult.updated) {
+      await updateLoyaltyData(client.gql, customerIdRaw, loyaltyData);
+    }
+  } catch (error) {
+    console.error("Loyalty proxy loader error:", error);
+    return Response.json(
+      {
+        success: false,
+        error:
+          "Sadakat verileri şu anda yüklenemiyor. Lütfen mağaza yöneticisine başvurun.",
+      },
+      { status: 502, headers: corsHeaders() }
+    );
   }
 
   // Strip expired / used coupons from the storefront response
@@ -186,7 +199,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
   }
 
-  const loyaltyData = await getLoyaltyData(client.gql, customerIdRaw);
+  let loyaltyData;
+  try {
+    loyaltyData = await getLoyaltyData(client.gql, customerIdRaw);
+  } catch (error) {
+    console.error("Loyalty proxy action error:", error);
+    return Response.json(
+      {
+        success: false,
+        error:
+          "Sadakat verileri şu anda yüklenemiyor. Lütfen mağaza yöneticisine başvurun.",
+      },
+      { status: 502, headers: corsHeaders() }
+    );
+  }
 
   if ((loyaltyData.current_points || 0) < amount) {
     return Response.json(
