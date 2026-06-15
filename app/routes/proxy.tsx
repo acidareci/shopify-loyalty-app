@@ -220,7 +220,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
   }
 
-  const code = generateCouponCode(customerIdRaw);
+  const code = generateCouponCode();
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 

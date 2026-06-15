@@ -70,8 +70,9 @@ api_version = "2025-10"
   uri = "/webhooks/shop/redact"
   compliance_topics = [ "shop/redact" ]
 
-  # orders/paid requires Protected Customer Data approval.
-  # Points are credited on-demand in the App Proxy instead.
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/orders/paid"
+  topics = [ "orders/paid" ]
 
 [auth]
 redirect_urls = [ "https://loyalty-kutu-oyun.onrender.com/api/auth" ]

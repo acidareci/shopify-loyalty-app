@@ -258,10 +258,50 @@ export async function createDiscountCode(
   };
 }
 
-export function generateCouponCode(customerId: string): string {
-  const suffix = String(customerId).replace(/\D/g, "").slice(-4).padStart(4, "0");
+/**
+ * Credits loyalty points for a single order immediately, used by the
+ * orders/paid webhook so points don't depend on the customer visiting
+ * the Puanlarım page (which only triggers syncCustomerOrders).
+ */
+export async function creditOrder(
+  graphql: GraphQLClient,
+  db: PrismaClient,
+  shop: string,
+  customerId: string,
+  orderId: string,
+  orderTotal: number,
+  pointsRate = 0.03
+): Promise<{ credited: boolean; pointsAdded: number }> {
+  if (orderTotal <= 0) return { credited: false, pointsAdded: 0 };
+
+  const loyaltyData = await getLoyaltyData(graphql, customerId);
+  if (loyaltyData.credited_order_ids.includes(orderId)) {
+    return { credited: false, pointsAdded: 0 };
+  }
+
+  const points = calcPoints(orderTotal, pointsRate);
+  loyaltyData.total_earned_points = (loyaltyData.total_earned_points || 0) + points;
+  loyaltyData.current_points = (loyaltyData.current_points || 0) + points;
+  loyaltyData.credited_order_ids = [...loyaltyData.credited_order_ids, orderId];
+
+  await updateLoyaltyData(graphql, customerId, loyaltyData);
+
+  await db.loyaltyEvent.create({
+    data: {
+      shop,
+      customerId,
+      type: "earn",
+      points,
+      orderId,
+    },
+  });
+
+  return { credited: true, pointsAdded: points };
+}
+
+export function generateCouponCode(): string {
   const random = Math.random().toString(36).substring(2, 8).toUpperCase();
-  return `LOYAL${suffix}${random}`;
+  return `KOA${random}`;
 }
 
 export function calcPoints(orderTotal: number, rate = 0.03): number {
