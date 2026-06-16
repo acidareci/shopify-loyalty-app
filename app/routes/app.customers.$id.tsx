@@ -24,9 +24,10 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       query LoyaltyCustomer($id: ID!) {
         customer(id: $id) {
           id
-          displayName
-          email
-          phone
+          firstName
+          lastName
+          defaultEmailAddress { emailAddress }
+          defaultPhoneNumber { phoneNumber }
           numberOfOrders
           amountSpent { amount currencyCode }
           createdAt
@@ -39,10 +40,19 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     if (customerJson?.errors?.length) {
       throw new Error(customerJson.errors[0]?.message || "GraphQL error");
     }
-    customer = customerJson?.data?.customer ?? null;
+    const raw = customerJson?.data?.customer ?? null;
+    if (raw) {
+      customer = {
+        ...raw,
+        displayName:
+          [raw.firstName, raw.lastName].filter(Boolean).join(" ") || `#${numericId}`,
+        email: raw.defaultEmailAddress?.emailAddress || raw.email || "—",
+        phone: raw.defaultPhoneNumber?.phoneNumber || raw.phone || "—",
+      };
+    }
   } catch (err) {
     console.error("Customer detail error:", err);
-    error = "Müşteri bilgileri yüklenemedi. Lütfen Protected Customer Data onayını kontrol edin.";
+    error = `Müşteri bilgileri yüklenemedi: ${err instanceof Error ? err.message : String(err)}`;
   }
 
   if (!loyaltyData) {

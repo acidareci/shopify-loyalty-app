@@ -9,22 +9,22 @@ function toNumericId(id: string): string {
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
 
   const url = new URL(request.url);
   const search = url.searchParams.get("q")?.trim() ?? "";
 
-  // Get all events for this shop, then aggregate in JS to handle mixed GID/numeric IDs
+  // Aggregate from our DB — no bulk customer listing needed
   const events = await db.loyaltyEvent.findMany({
     where: { shop },
     select: { customerId: true, email: true, type: true, points: true },
   });
 
-  // Normalize all customer IDs to numeric
   type CustomerStats = {
     numericId: string;
     email: string;
+    name: string;
     totalEarned: number;
     eventCount: number;
   };
@@ -36,12 +36,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     if (!existing) {
       statsMap.set(numericId, {
         numericId,
-        email: ev.email ?? "—",
+        email: ev.email ?? "",
+        name: "",
         totalEarned: ev.type === "earn" ? ev.points : 0,
         eventCount: 1,
       });
     } else {
-      if (ev.email && existing.email === "—") existing.email = ev.email;
+      if (ev.email && !existing.email) existing.email = ev.email;
       if (ev.type === "earn") existing.totalEarned += ev.points;
       existing.eventCount += 1;
     }
@@ -49,15 +50,60 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   let customers = [...statsMap.values()].sort((a, b) => b.totalEarned - a.totalEarned);
 
+  // Batch-fetch customer info from Shopify using nodes query (individual customer IDs — PCD Level 1)
+  const top50 = customers.slice(0, 50);
+  if (top50.length > 0) {
+    try {
+      const gids = top50.map((c) => `gid://shopify/Customer/${c.numericId}`);
+      const resp = await admin.graphql(
+        `#graphql
+        query CustomerNodes($ids: [ID!]!) {
+          nodes(ids: $ids) {
+            ... on Customer {
+              id
+              firstName
+              lastName
+              defaultEmailAddress { emailAddress }
+            }
+          }
+        }`,
+        { variables: { ids: gids } }
+      );
+      const json: any = await resp.json();
+      const nodes: any[] = json?.data?.nodes ?? [];
+      for (const node of nodes) {
+        if (!node?.id) continue;
+        const numericId = toNumericId(node.id);
+        const stat = statsMap.get(numericId);
+        if (!stat) continue;
+        const fullName = [node.firstName, node.lastName].filter(Boolean).join(" ");
+        if (fullName) stat.name = fullName;
+        const email = node.defaultEmailAddress?.emailAddress;
+        if (email) stat.email = email;
+      }
+    } catch (err) {
+      // Non-fatal — we still show customers with IDs
+      console.warn("Customer nodes fetch failed:", err);
+    }
+  }
+
   if (search) {
     const q = search.toLowerCase();
     customers = customers.filter(
       (c) =>
-        c.numericId.includes(q) || c.email.toLowerCase().includes(q)
+        c.numericId.includes(q) ||
+        c.email.toLowerCase().includes(q) ||
+        c.name.toLowerCase().includes(q)
     );
   }
 
-  return { customers: customers.slice(0, 100), search };
+  return {
+    customers: customers.slice(0, 100).map((c) => ({
+      ...c,
+      displayLabel: c.name || c.email || `Müşteri #${c.numericId}`,
+    })),
+    search,
+  };
 };
 
 export default function CustomersList() {
@@ -84,10 +130,10 @@ export default function CustomersList() {
             type="text"
             name="q"
             defaultValue={search}
-            placeholder="Müşteri ID veya e-posta ile ara…"
+            placeholder="İsim, e-posta veya müşteri ID ile ara…"
             style={{
               width: "100%",
-              maxWidth: "360px",
+              maxWidth: "400px",
               boxSizing: "border-box",
               padding: "8px 12px",
               border: "1px solid var(--p-color-border)",
@@ -119,19 +165,21 @@ export default function CustomersList() {
                     background: "var(--p-color-bg-surface-secondary)",
                   }}
                 >
-                  {["Müşteri", "Toplam Kazanılan Puan", "İşlem Sayısı", ""].map((h) => (
-                    <th
-                      key={h}
-                      style={{
-                        padding: "10px 14px",
-                        textAlign: "left",
-                        fontWeight: 600,
-                        color: "var(--p-color-text-secondary)",
-                      }}
-                    >
-                      {h}
-                    </th>
-                  ))}
+                  {["Müşteri", "Toplam Kazanılan Puan", "İşlem Sayısı", ""].map(
+                    (h) => (
+                      <th
+                        key={h}
+                        style={{
+                          padding: "10px 14px",
+                          textAlign: "left",
+                          fontWeight: 600,
+                          color: "var(--p-color-text-secondary)",
+                        }}
+                      >
+                        {h}
+                      </th>
+                    )
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -141,9 +189,12 @@ export default function CustomersList() {
                     style={{ borderBottom: "1px solid var(--p-color-border-subdued)" }}
                   >
                     <td style={{ padding: "10px 14px" }}>
-                      <div style={{ fontWeight: 500 }}>
-                        {c.email !== "—" ? c.email : `Müşteri #${c.numericId}`}
-                      </div>
+                      <div style={{ fontWeight: 500 }}>{c.displayLabel}</div>
+                      {c.email && c.name && (
+                        <div style={{ fontSize: "12px", color: "var(--p-color-text-secondary)" }}>
+                          {c.email}
+                        </div>
+                      )}
                       <div style={{ fontSize: "11px", color: "var(--p-color-text-secondary)" }}>
                         #{c.numericId}
                       </div>
