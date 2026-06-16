@@ -1,5 +1,5 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { Link, useLoaderData, useSearchParams } from "react-router";
+import { useLoaderData, useSearchParams } from "react-router";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import db from "../db.server";
@@ -70,6 +70,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         { variables: { ids: gids } }
       );
       const json: any = await resp.json();
+      if (json?.errors?.length) {
+        console.error("nodes query errors:", JSON.stringify(json.errors));
+      }
       const nodes: any[] = json?.data?.nodes ?? [];
       for (const node of nodes) {
         if (!node?.id) continue;
@@ -81,9 +84,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         const email = node.defaultEmailAddress?.emailAddress;
         if (email) stat.email = email;
       }
+      console.log("nodes sample:", JSON.stringify(nodes[0]));
     } catch (err) {
-      // Non-fatal — we still show customers with IDs
-      console.warn("Customer nodes fetch failed:", err);
+      console.error("Customer nodes fetch failed:", err);
     }
   }
 
@@ -212,7 +215,7 @@ export default function CustomersList() {
                       {c.eventCount}
                     </td>
                     <td style={{ padding: "10px 14px" }}>
-                      <Link to={`/app/customers/${c.numericId}`}>Detay →</Link>
+                      <s-link href={`/app/customers/${c.numericId}`}>Detay →</s-link>
                     </td>
                   </tr>
                 ))}

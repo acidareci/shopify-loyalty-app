@@ -3,7 +3,7 @@ import type {
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
-import { Link, useFetcher, useLoaderData } from "react-router";
+import { useFetcher, useLoaderData } from "react-router";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import db from "../db.server";
@@ -397,7 +397,7 @@ export default function CustomerDetail() {
       </s-section>
 
       <s-section slot="aside" heading="">
-        <Link to="/app/customers">← Müşteri listesine dön</Link>
+        <s-link href="/app/customers">← Müşteri listesine dön</s-link>
       </s-section>
     </s-page>
   );
