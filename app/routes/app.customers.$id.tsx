@@ -3,7 +3,7 @@ import type {
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
-import { useFetcher, useLoaderData, useNavigate } from "react-router";
+import { useFetcher, useLoaderData } from "react-router";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import db from "../db.server";
@@ -139,7 +139,6 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 export default function CustomerDetail() {
   const { numericId, customer, loyaltyData, events, error } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
-  const navigate = useNavigate();
 
   const isSaving = fetcher.state !== "idle" && fetcher.formMethod === "POST";
 
@@ -391,7 +390,7 @@ export default function CustomerDetail() {
 
       <s-section slot="aside" heading="">
         <button
-          onClick={() => navigate("/app/customers")}
+          onClick={() => { window.location.href = "/app/customers"; }}
           style={{ background:"none", border:"none", color:"var(--p-color-text-emphasis)", cursor:"pointer", fontSize:"13px", fontFamily:"inherit", padding:0, textDecoration:"underline" }}
         >
           ← Müşteri listesine dön
