@@ -3,7 +3,7 @@ import type {
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
-import { useFetcher, useLoaderData } from "react-router";
+import { useFetcher, useLoaderData, useNavigate } from "react-router";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import db from "../db.server";
@@ -18,13 +18,16 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   let error: string | null = null;
   let loyaltyData = await getLoyaltyData(admin.graphql, customerId).catch(() => null);
 
-  // Only query fields that don't require PCD (name/email fields return null regardless)
   try {
     const customerResponse = await admin.graphql(
       `#graphql
       query LoyaltyCustomer($id: ID!) {
         customer(id: $id) {
           id
+          firstName
+          lastName
+          email
+          phone
           numberOfOrders
           amountSpent { amount currencyCode }
           createdAt
@@ -34,30 +37,16 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     );
 
     const customerJson: any = await customerResponse.json();
+    // Use partial data even if some fields errored
     const raw = customerJson?.data?.customer ?? null;
     if (raw) {
-      customer = {
-        numericId,
-        numberOfOrders: raw.numberOfOrders ?? 0,
-        amountSpent: raw.amountSpent?.amount ?? "0",
-        currency: raw.amountSpent?.currencyCode ?? "TRY",
-        createdAt: raw.createdAt ?? null,
-      };
+      customer = raw;
     }
   } catch (err: any) {
+    // admin.graphql() throws on graphQLErrors but may still carry partial data
     const raw = err?.body?.data?.customer ?? err?.response?.data?.customer ?? null;
-    if (raw) {
-      customer = {
-        numericId,
-        numberOfOrders: raw.numberOfOrders ?? 0,
-        amountSpent: raw.amountSpent?.amount ?? "0",
-        currency: raw.amountSpent?.currencyCode ?? "TRY",
-        createdAt: raw.createdAt ?? null,
-      };
-    } else {
-      // Non-fatal — still show loyalty data
-      console.error("Customer detail error:", err?.message ?? err);
-    }
+    if (raw) customer = raw;
+    else console.error("Customer detail error:", err?.message ?? err);
   }
 
   if (!loyaltyData) {
@@ -84,8 +73,15 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   return {
     numericId,
     error,
-    customer: customer
-      ?? null,
+    customer: customer ? {
+      name: [customer.firstName, customer.lastName].filter(Boolean).join(" ") || `#${numericId}`,
+      email: customer.email || "—",
+      phone: customer.phone || "—",
+      numberOfOrders: customer.numberOfOrders ?? 0,
+      amountSpent: customer.amountSpent?.amount ?? "0",
+      currency: customer.amountSpent?.currencyCode ?? "TRY",
+      createdAt: customer.createdAt ?? null,
+    } : null,
     loyaltyData,
     events: shopEvents.map((e) => ({
       id: e.id,
@@ -143,6 +139,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 export default function CustomerDetail() {
   const { numericId, customer, loyaltyData, events, error } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
+  const navigate = useNavigate();
 
   const isSaving = fetcher.state !== "idle" && fetcher.formMethod === "POST";
 
@@ -155,18 +152,25 @@ export default function CustomerDetail() {
     );
 
   return (
-    <s-page heading={`Müşteri #${numericId}`}>
+    <s-page heading={customer?.name ?? `Müşteri #${numericId}`}>
+      {error && (
+        <s-section>
+          <s-box padding="base" background="subdued" borderRadius="base">
+            <s-paragraph>{error}</s-paragraph>
+          </s-box>
+        </s-section>
+      )}
+
       {customer && (
         <s-section heading="Müşteri Bilgileri">
           <s-stack direction="inline" gap="base">
+            <InfoCard label="İsim" value={customer.name} />
+            <InfoCard label="E-posta" value={customer.email} />
             <InfoCard label="Sipariş Sayısı" value={String(customer.numberOfOrders)} />
             <InfoCard
               label="Toplam Harcama"
               value={`${fmt(parseFloat(customer.amountSpent))} ${customer.currency}`}
             />
-            {customer.createdAt && (
-              <InfoCard label="Üye Tarihi" value={fmtDate(customer.createdAt)} />
-            )}
           </s-stack>
         </s-section>
       )}
@@ -386,7 +390,12 @@ export default function CustomerDetail() {
       </s-section>
 
       <s-section slot="aside" heading="">
-        <s-link href="/app/customers">← Müşteri listesine dön</s-link>
+        <button
+          onClick={() => navigate("/app/customers")}
+          style={{ background:"none", border:"none", color:"var(--p-color-text-emphasis)", cursor:"pointer", fontSize:"13px", fontFamily:"inherit", padding:0, textDecoration:"underline" }}
+        >
+          ← Müşteri listesine dön
+        </button>
       </s-section>
     </s-page>
   );

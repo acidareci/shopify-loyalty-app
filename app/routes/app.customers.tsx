@@ -1,5 +1,5 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useSearchParams } from "react-router";
+import { useLoaderData, useNavigate, useSearchParams } from "react-router";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import db from "../db.server";
@@ -72,6 +72,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 export default function CustomersList() {
   const { customers, search } = useLoaderData<typeof loader>();
   const [, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
 
   const fmt = (n: number) =>
     new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2 }).format(n);
@@ -175,7 +176,21 @@ export default function CustomersList() {
                       {c.eventCount}
                     </td>
                     <td style={{ padding: "10px 14px" }}>
-                      <s-link href={`/app/customers/${c.numericId}`}>Detay →</s-link>
+                      <button
+                        onClick={() => navigate(`/app/customers/${c.numericId}`)}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "var(--p-color-text-emphasis)",
+                          cursor: "pointer",
+                          fontSize: "13px",
+                          fontFamily: "inherit",
+                          padding: 0,
+                          textDecoration: "underline",
+                        }}
+                      >
+                        Detay →
+                      </button>
                     </td>
                   </tr>
                 ))}
