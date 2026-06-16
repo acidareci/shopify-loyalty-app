@@ -55,8 +55,13 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     };
   }
 
+  // Customer IDs in DB can be numeric or GID — match both formats
+  const gidId = `gid://shopify/Customer/${numericId}`;
   const shopEvents = await db.loyaltyEvent.findMany({
-    where: { shop: session.shop, customerId: numericId },
+    where: {
+      shop: session.shop,
+      OR: [{ customerId: numericId }, { customerId: gidId }],
+    },
     orderBy: { createdAt: "desc" },
     take: 50,
   });
