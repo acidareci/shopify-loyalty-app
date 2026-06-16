@@ -37,9 +37,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     );
 
     const customerJson: any = await customerResponse.json();
-    if (customerJson?.errors?.length) {
-      throw new Error(customerJson.errors[0]?.message || "GraphQL error");
-    }
+    // Use data even if graphQLErrors are present (partial success)
     const raw = customerJson?.data?.customer ?? null;
     if (raw) {
       customer = {
@@ -50,9 +48,21 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
         phone: raw.defaultPhoneNumber?.phoneNumber || raw.phone || "—",
       };
     }
-  } catch (err) {
-    console.error("Customer detail error:", err);
-    error = `Müşteri bilgileri yüklenemedi: ${err instanceof Error ? err.message : String(err)}`;
+  } catch (err: any) {
+    // admin.graphql() throws when graphQLErrors exist but partial data may still be on err.body
+    const raw = err?.body?.data?.customer ?? err?.response?.data?.customer ?? null;
+    if (raw) {
+      customer = {
+        ...raw,
+        displayName:
+          [raw.firstName, raw.lastName].filter(Boolean).join(" ") || `#${numericId}`,
+        email: raw.defaultEmailAddress?.emailAddress || raw.email || "—",
+        phone: raw.defaultPhoneNumber?.phoneNumber || raw.phone || "—",
+      };
+    } else {
+      console.error("Customer detail error:", err);
+      error = `Müşteri bilgileri yüklenemedi: ${err?.message ?? String(err)}`;
+    }
   }
 
   if (!loyaltyData) {

@@ -69,11 +69,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         }`,
         { variables: { ids: gids } }
       );
-      const json: any = await resp.json();
-      if (json?.errors?.length) {
-        console.error("nodes query errors:", JSON.stringify(json.errors));
+      // Extract nodes even when admin.graphql() throws due to graphQLErrors (partial success)
+      let nodes: any[] = [];
+      try {
+        const json: any = await resp.json();
+        nodes = json?.data?.nodes ?? [];
+      } catch {
+        // resp.json() may throw if admin.graphql() already threw — extract from err below
       }
-      const nodes: any[] = json?.data?.nodes ?? [];
+
       for (const node of nodes) {
         if (!node?.id) continue;
         const numericId = toNumericId(node.id);
@@ -84,9 +88,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         const email = node.defaultEmailAddress?.emailAddress;
         if (email) stat.email = email;
       }
-      console.log("nodes sample:", JSON.stringify(nodes[0]));
-    } catch (err) {
-      console.error("Customer nodes fetch failed:", err);
+    } catch (err: any) {
+      // admin.graphql() throws on graphQLErrors — try to extract partial data
+      const nodes: any[] = err?.body?.data?.nodes ?? err?.response?.data?.nodes ?? [];
+      for (const node of nodes) {
+        if (!node?.id) continue;
+        const numericId = toNumericId(node.id);
+        const stat = statsMap.get(numericId);
+        if (!stat) continue;
+        const fullName = [node.firstName, node.lastName].filter(Boolean).join(" ");
+        if (fullName) stat.name = fullName;
+        const email = node.defaultEmailAddress?.emailAddress;
+        if (email) stat.email = email;
+      }
+      if (!nodes.length) console.error("Customer nodes fetch failed:", err?.message);
     }
   }
 
