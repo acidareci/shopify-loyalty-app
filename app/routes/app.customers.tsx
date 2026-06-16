@@ -26,7 +26,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const response = await admin.graphql(
       `#graphql
       query LoyaltyCustomers($query: String) {
-        customers(first: 50, query: $query, sortKey: UPDATED_AT, reverse: true) {
+        customers(first: 50, query: $query, sortKey: CREATED_AT, reverse: true) {
           edges {
             node {
               id
@@ -84,10 +84,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     });
   } catch (err) {
     console.error("Customers list error:", err);
-    error =
-      "Müşteri listesi yüklenemedi. Bu özellik için Partner Dashboard'da " +
-      "'Protected Customer Data' onayının (müşteri listesi erişimi için Level 2) " +
-      "tamamlanmış olması gerekir.";
+    const msg = err instanceof Error ? err.message : String(err);
+    error = `Müşteri listesi yüklenemedi: ${msg}`;
   }
 
   return { customers, search, error };
