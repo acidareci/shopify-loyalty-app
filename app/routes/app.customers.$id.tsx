@@ -18,16 +18,13 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   let error: string | null = null;
   let loyaltyData = await getLoyaltyData(admin.graphql, customerId).catch(() => null);
 
+  // Only query fields that don't require PCD (name/email fields return null regardless)
   try {
     const customerResponse = await admin.graphql(
       `#graphql
       query LoyaltyCustomer($id: ID!) {
         customer(id: $id) {
           id
-          firstName
-          lastName
-          defaultEmailAddress { emailAddress }
-          defaultPhoneNumber { phoneNumber }
           numberOfOrders
           amountSpent { amount currencyCode }
           createdAt
@@ -37,33 +34,29 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     );
 
     const customerJson: any = await customerResponse.json();
-    // Use data even if graphQLErrors are present (partial success)
     const raw = customerJson?.data?.customer ?? null;
     if (raw) {
       customer = {
-        ...raw,
-        displayName:
-          [raw.firstName, raw.lastName].filter(Boolean).join(" ") || `#${numericId}`,
-        email: raw.defaultEmailAddress?.emailAddress || raw.email || "—",
-        phone: raw.defaultPhoneNumber?.phoneNumber || raw.phone || "—",
+        numericId,
+        numberOfOrders: raw.numberOfOrders ?? 0,
+        amountSpent: raw.amountSpent?.amount ?? "0",
+        currency: raw.amountSpent?.currencyCode ?? "TRY",
+        createdAt: raw.createdAt ?? null,
       };
     }
   } catch (err: any) {
-    console.error("DETAIL_ERR_KEYS:", Object.keys(err ?? {}));
-    console.error("DETAIL_ERR_BODY:", JSON.stringify(err?.body?.data ?? err?.response?.data ?? err?.data ?? "none").slice(0, 300));
-    // admin.graphql() throws when graphQLErrors exist but partial data may still be on err.body
-    const raw = err?.body?.data?.customer ?? err?.response?.data?.customer ?? err?.data?.customer ?? null;
+    const raw = err?.body?.data?.customer ?? err?.response?.data?.customer ?? null;
     if (raw) {
       customer = {
-        ...raw,
-        displayName:
-          [raw.firstName, raw.lastName].filter(Boolean).join(" ") || `#${numericId}`,
-        email: raw.defaultEmailAddress?.emailAddress || raw.email || "—",
-        phone: raw.defaultPhoneNumber?.phoneNumber || raw.phone || "—",
+        numericId,
+        numberOfOrders: raw.numberOfOrders ?? 0,
+        amountSpent: raw.amountSpent?.amount ?? "0",
+        currency: raw.amountSpent?.currencyCode ?? "TRY",
+        createdAt: raw.createdAt ?? null,
       };
     } else {
-      console.error("Customer detail error:", err);
-      error = `Müşteri bilgileri yüklenemedi: ${err?.message ?? String(err)}`;
+      // Non-fatal — still show loyalty data
+      console.error("Customer detail error:", err?.message ?? err);
     }
   }
 
@@ -92,16 +85,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     numericId,
     error,
     customer: customer
-      ? {
-          name: customer.displayName || "—",
-          email: customer.email || "—",
-          phone: customer.phone || "—",
-          numberOfOrders: customer.numberOfOrders ?? 0,
-          amountSpent: customer.amountSpent?.amount ?? "0",
-          currency: customer.amountSpent?.currencyCode ?? "TRY",
-          createdAt: customer.createdAt,
-        }
-      : null,
+      ?? null,
     loyaltyData,
     events: shopEvents.map((e) => ({
       id: e.id,
@@ -171,25 +155,18 @@ export default function CustomerDetail() {
     );
 
   return (
-    <s-page heading={customer?.name ?? `Müşteri #${numericId}`}>
-      {error && (
-        <s-section>
-          <s-box padding="base" background="subdued" borderRadius="base">
-            <s-paragraph>{error}</s-paragraph>
-          </s-box>
-        </s-section>
-      )}
-
+    <s-page heading={`Müşteri #${numericId}`}>
       {customer && (
         <s-section heading="Müşteri Bilgileri">
           <s-stack direction="inline" gap="base">
-            <InfoCard label="E-posta" value={customer.email} />
-            <InfoCard label="Telefon" value={customer.phone} />
             <InfoCard label="Sipariş Sayısı" value={String(customer.numberOfOrders)} />
             <InfoCard
               label="Toplam Harcama"
               value={`${fmt(parseFloat(customer.amountSpent))} ${customer.currency}`}
             />
+            {customer.createdAt && (
+              <InfoCard label="Üye Tarihi" value={fmtDate(customer.createdAt)} />
+            )}
           </s-stack>
         </s-section>
       )}

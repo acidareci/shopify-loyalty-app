@@ -9,7 +9,7 @@ function toNumericId(id: string): string {
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
   const url = new URL(request.url);
@@ -49,61 +49,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   let customers = [...statsMap.values()].sort((a, b) => b.totalEarned - a.totalEarned);
-
-  // Batch-fetch customer info from Shopify using nodes query (individual customer IDs — PCD Level 1)
-  const top50 = customers.slice(0, 50);
-  if (top50.length > 0) {
-    try {
-      const gids = top50.map((c) => `gid://shopify/Customer/${c.numericId}`);
-      const resp = await admin.graphql(
-        `#graphql
-        query CustomerNodes($ids: [ID!]!) {
-          nodes(ids: $ids) {
-            ... on Customer {
-              id
-              firstName
-              lastName
-              defaultEmailAddress { emailAddress }
-            }
-          }
-        }`,
-        { variables: { ids: gids } }
-      );
-      // Extract nodes even when admin.graphql() throws due to graphQLErrors (partial success)
-      let nodes: any[] = [];
-      try {
-        const json: any = await resp.json();
-        nodes = json?.data?.nodes ?? [];
-      } catch {
-        // resp.json() may throw if admin.graphql() already threw — extract from err below
-      }
-
-      for (const node of nodes) {
-        if (!node?.id) continue;
-        const numericId = toNumericId(node.id);
-        const stat = statsMap.get(numericId);
-        if (!stat) continue;
-        const fullName = [node.firstName, node.lastName].filter(Boolean).join(" ");
-        if (fullName) stat.name = fullName;
-        const email = node.defaultEmailAddress?.emailAddress;
-        if (email) stat.email = email;
-      }
-    } catch (err: any) {
-      // admin.graphql() throws on graphQLErrors — try to extract partial data
-      const nodes: any[] = err?.body?.data?.nodes ?? err?.response?.data?.nodes ?? [];
-      for (const node of nodes) {
-        if (!node?.id) continue;
-        const numericId = toNumericId(node.id);
-        const stat = statsMap.get(numericId);
-        if (!stat) continue;
-        const fullName = [node.firstName, node.lastName].filter(Boolean).join(" ");
-        if (fullName) stat.name = fullName;
-        const email = node.defaultEmailAddress?.emailAddress;
-        if (email) stat.email = email;
-      }
-      if (!nodes.length) console.error("Customer nodes fetch failed:", err?.message);
-    }
-  }
 
   if (search) {
     const q = search.toLowerCase();
