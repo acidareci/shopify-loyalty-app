@@ -49,8 +49,10 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       };
     }
   } catch (err: any) {
+    console.error("DETAIL_ERR_KEYS:", Object.keys(err ?? {}));
+    console.error("DETAIL_ERR_BODY:", JSON.stringify(err?.body?.data ?? err?.response?.data ?? err?.data ?? "none").slice(0, 300));
     // admin.graphql() throws when graphQLErrors exist but partial data may still be on err.body
-    const raw = err?.body?.data?.customer ?? err?.response?.data?.customer ?? null;
+    const raw = err?.body?.data?.customer ?? err?.response?.data?.customer ?? err?.data?.customer ?? null;
     if (raw) {
       customer = {
         ...raw,
