@@ -11,7 +11,7 @@ function toNumericId(id: string): string {
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
 
   const url = new URL(request.url);
@@ -49,21 +49,55 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
-  let customers = [...statsMap.values()].sort((a, b) => b.totalEarned - a.totalEarned);
+  // Fetch names from Shopify for up to 30 customers using aliased queries
+  const allCustomers = [...statsMap.values()];
+  const toFetch = allCustomers.slice(0, 30);
+  if (toFetch.length > 0) {
+    try {
+      const aliases = toFetch
+        .map((c) => `c${c.numericId}: customer(id: "gid://shopify/Customer/${c.numericId}") { firstName lastName email }`)
+        .join("\n");
+      const res = await admin.graphql(`#graphql\nquery { ${aliases} }`);
+      const j: any = await res.json();
+      const data = j?.data ?? j?.body?.data ?? {};
+      for (const c of toFetch) {
+        const raw = data[`c${c.numericId}`];
+        if (raw) {
+          const name = [raw.firstName, raw.lastName].filter(Boolean).join(" ");
+          if (name) c.name = name;
+          if (raw.email && !c.email) c.email = raw.email;
+        }
+      }
+    } catch (err: any) {
+      // partial data may be in err.body.data
+      const data = err?.body?.data ?? {};
+      for (const c of toFetch) {
+        const raw = data[`c${c.numericId}`];
+        if (raw) {
+          const name = [raw.firstName, raw.lastName].filter(Boolean).join(" ");
+          if (name) c.name = name;
+          if (raw.email && !c.email) c.email = raw.email;
+        }
+      }
+    }
+  }
+
+  let customers = allCustomers.sort((a, b) => b.totalEarned - a.totalEarned);
 
   if (search) {
     const q = search.toLowerCase();
     customers = customers.filter(
       (c) =>
         c.numericId.includes(q) ||
-        c.email.toLowerCase().includes(q)
+        c.email.toLowerCase().includes(q) ||
+        c.name.toLowerCase().includes(q)
     );
   }
 
   return {
     customers: customers.slice(0, 100).map((c) => ({
       ...c,
-      displayLabel: c.email || `Müşteri #${c.numericId}`,
+      displayLabel: c.name || c.email || `Müşteri #${c.numericId}`,
     })),
     search,
   };
@@ -108,7 +142,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const shopEvents = await db.loyaltyEvent.findMany({
       where: { shop: session.shop, OR: [{ customerId: numericId }, { customerId: gidId }] },
       orderBy: { createdAt: "desc" },
-      take: 30,
+      take: 50,
     });
 
     return {
@@ -201,13 +235,16 @@ export default function CustomersList() {
             const value = (e.currentTarget.elements.namedItem("q") as HTMLInputElement).value;
             setSearchParams(value ? { q: value } : {});
           }}
-          style={{ marginBottom: "16px" }}
+          style={{ marginBottom: "16px", display: "flex", gap: "8px" }}
         >
           <input
             type="text" name="q" defaultValue={search}
-            placeholder="E-posta veya müşteri ID ile ara…"
-            style={{ width: "100%", maxWidth: "400px", boxSizing: "border-box", padding: "8px 12px", border: "1px solid var(--p-color-border)", borderRadius: "8px", fontSize: "14px", color: "var(--p-color-text)", background: "var(--p-color-bg-surface)", fontFamily: "inherit" }}
+            placeholder="İsim, e-posta veya müşteri ID ile ara…"
+            style={{ flex: 1, maxWidth: "400px", boxSizing: "border-box", padding: "8px 12px", border: "1px solid var(--p-color-border)", borderRadius: "8px", fontSize: "14px", color: "var(--p-color-text)", background: "var(--p-color-bg-surface)", fontFamily: "inherit" }}
           />
+          <button type="submit" style={{ padding: "8px 16px", background: "var(--p-color-bg-fill-brand)", color: "#fff", border: "none", borderRadius: "8px", fontSize: "14px", cursor: "pointer", fontFamily: "inherit" }}>
+            Ara
+          </button>
         </form>
 
         {customers.length === 0 ? (
@@ -215,128 +252,139 @@ export default function CustomersList() {
             <s-paragraph>Henüz sadakat programını kullanan müşteri yok.</s-paragraph>
           </s-box>
         ) : (
-          <div>
-            {customers.map((c) => {
+          <div style={{ border: "1px solid var(--p-color-border)", borderRadius: "8px", overflow: "hidden" }}>
+            {customers.map((c, idx) => {
               const isOpen = openId === c.numericId;
               const isLoading = isOpen && detailFetcher.state !== "idle";
               const showDetail = isOpen && detail && detail.numericId === c.numericId;
 
               return (
-                <div key={c.numericId} style={{ borderBottom: "1px solid var(--p-color-border-subdued)" }}>
+                <div key={c.numericId} style={{ borderBottom: idx < customers.length - 1 ? "1px solid var(--p-color-border-subdued)" : "none" }}>
                   {/* Satır */}
                   <div
-                    style={{ display: "flex", alignItems: "center", padding: "12px 14px", cursor: "pointer", gap: "16px", background: isOpen ? "var(--p-color-bg-surface-secondary)" : "transparent" }}
+                    style={{ display: "flex", alignItems: "center", padding: "12px 16px", cursor: "pointer", gap: "16px", background: isOpen ? "var(--p-color-bg-surface-secondary)" : "var(--p-color-bg-surface)" }}
                     onClick={() => handleOpen(c.numericId)}
                   >
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 500, fontSize: "13px" }}>{c.displayLabel}</div>
-                      <div style={{ fontSize: "11px", color: "var(--p-color-text-secondary)" }}>#{c.numericId}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: "14px", color: "var(--p-color-text)" }}>{c.displayLabel}</div>
+                      {c.name && c.email && (
+                        <div style={{ fontSize: "12px", color: "var(--p-color-text-secondary)" }}>{c.email}</div>
+                      )}
+                      <div style={{ fontSize: "11px", color: "var(--p-color-text-subdued)" }}>#{c.numericId}</div>
                     </div>
-                    <div style={{ textAlign: "right", minWidth: "100px" }}>
-                      <div style={{ fontWeight: 700, color: "var(--p-color-text-success)", fontSize: "13px" }}>{fmt(c.totalEarned)} puan</div>
+                    <div style={{ textAlign: "right", flexShrink: 0 }}>
+                      <div style={{ fontWeight: 700, color: "var(--p-color-text-success)", fontSize: "14px" }}>{fmt(c.totalEarned)} puan</div>
                       <div style={{ fontSize: "11px", color: "var(--p-color-text-secondary)" }}>{c.eventCount} işlem</div>
                     </div>
-                    <div style={{ fontSize: "18px", color: "var(--p-color-text-secondary)", userSelect: "none" }}>
+                    <div style={{ fontSize: "16px", color: "var(--p-color-text-secondary)", userSelect: "none", flexShrink: 0 }}>
                       {isOpen ? "▲" : "▼"}
                     </div>
                   </div>
 
                   {/* Detay Panel */}
                   {isOpen && (
-                    <div style={{ background: "var(--p-color-bg-surface)", borderTop: "1px solid var(--p-color-border-subdued)", padding: "16px 20px" }}>
-                      {isLoading && <p style={{ color: "var(--p-color-text-secondary)", fontSize: "13px" }}>Yükleniyor…</p>}
+                    <div style={{ background: "var(--p-color-bg-surface-secondary)", borderTop: "1px solid var(--p-color-border-subdued)", padding: "16px 20px" }}>
+                      {isLoading && (
+                        <p style={{ color: "var(--p-color-text-secondary)", fontSize: "13px", margin: 0 }}>Yükleniyor…</p>
+                      )}
 
                       {showDetail && (
                         <div style={{ display: "flex", gap: "24px", flexWrap: "wrap" }}>
-                          {/* Sol: Bilgiler */}
-                          <div style={{ flex: "1 1 300px" }}>
+                          {/* Sol: Bilgiler + Hareketler */}
+                          <div style={{ flex: "1 1 340px", minWidth: 0 }}>
                             {/* Müşteri bilgileri */}
                             {detail.customer && (
-                              <div style={{ marginBottom: "16px", padding: "12px", background: "var(--p-color-bg-surface-secondary)", borderRadius: "8px", fontSize: "13px" }}>
-                                <div style={{ fontWeight: 600, marginBottom: "8px", color: "var(--p-color-text)" }}>Müşteri Bilgileri</div>
-                                <div><span style={{ color: "var(--p-color-text-secondary)" }}>İsim: </span>{detail.customer.name}</div>
-                                <div><span style={{ color: "var(--p-color-text-secondary)" }}>E-posta: </span>{detail.customer.email}</div>
-                                <div><span style={{ color: "var(--p-color-text-secondary)" }}>Sipariş: </span>{detail.customer.numberOfOrders}</div>
-                                <div><span style={{ color: "var(--p-color-text-secondary)" }}>Harcama: </span>{fmt(parseFloat(detail.customer.amountSpent))} {detail.customer.currency}</div>
+                              <div style={{ marginBottom: "14px", padding: "12px 14px", background: "var(--p-color-bg-surface)", borderRadius: "8px", border: "1px solid var(--p-color-border-subdued)", fontSize: "13px" }}>
+                                <div style={{ fontWeight: 700, marginBottom: "8px", color: "var(--p-color-text)", fontSize: "13px" }}>Müşteri Bilgileri</div>
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 16px" }}>
+                                  <div><span style={{ color: "var(--p-color-text-secondary)" }}>İsim: </span><strong>{detail.customer.name}</strong></div>
+                                  <div><span style={{ color: "var(--p-color-text-secondary)" }}>E-posta: </span>{detail.customer.email}</div>
+                                  <div><span style={{ color: "var(--p-color-text-secondary)" }}>Sipariş: </span>{detail.customer.numberOfOrders}</div>
+                                  <div><span style={{ color: "var(--p-color-text-secondary)" }}>Harcama: </span>{fmt(parseFloat(detail.customer.amountSpent))} {detail.customer.currency}</div>
+                                </div>
                               </div>
                             )}
 
                             {/* Puan özeti */}
-                            <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}>
+                            <div style={{ display: "flex", gap: "8px", marginBottom: "14px" }}>
                               {[
                                 { l: "Mevcut Puan", v: fmt(detail.loyaltyData.current_points), hi: true },
-                                { l: "Toplam Kazanılan", v: fmt(detail.loyaltyData.total_earned_points) },
-                                { l: "Toplam Kullanılan", v: fmt(detail.loyaltyData.total_spent_points) },
+                                { l: "Kazanılan", v: fmt(detail.loyaltyData.total_earned_points) },
+                                { l: "Kullanılan", v: fmt(detail.loyaltyData.total_spent_points) },
                               ].map((s) => (
-                                <div key={s.l} style={{ flex: "1 1 100px", padding: "10px 12px", background: "var(--p-color-bg-surface-secondary)", borderRadius: "8px", fontSize: "12px" }}>
+                                <div key={s.l} style={{ flex: 1, padding: "10px 12px", background: "var(--p-color-bg-surface)", borderRadius: "8px", border: "1px solid var(--p-color-border-subdued)", fontSize: "12px", textAlign: "center" }}>
                                   <div style={{ color: "var(--p-color-text-secondary)", marginBottom: "4px" }}>{s.l}</div>
-                                  <div style={{ fontWeight: 700, fontSize: "15px", color: s.hi ? "var(--p-color-text-success)" : "var(--p-color-text)" }}>{s.v}</div>
+                                  <div style={{ fontWeight: 700, fontSize: "16px", color: s.hi ? "var(--p-color-text-success)" : "var(--p-color-text)" }}>{s.v}</div>
                                 </div>
                               ))}
                             </div>
 
-                            {/* Son olaylar */}
+                            {/* Son hareketler - scrollable */}
                             {detail.events.length > 0 && (
                               <div>
-                                <div style={{ fontWeight: 600, fontSize: "13px", marginBottom: "8px" }}>Son Hareketler</div>
-                                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
-                                  <thead>
-                                    <tr style={{ borderBottom: "1px solid var(--p-color-border)" }}>
-                                      {["Tarih", "İşlem", "Puan", "Ref"].map((h) => (
-                                        <th key={h} style={{ padding: "6px 10px", textAlign: "left", color: "var(--p-color-text-secondary)", fontWeight: 600 }}>{h}</th>
-                                      ))}
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {detail.events.map((ev: any) => (
-                                      <tr key={ev.id} style={{ borderBottom: "1px solid var(--p-color-border-subdued)" }}>
-                                        <td style={{ padding: "6px 10px", color: "var(--p-color-text-secondary)", whiteSpace: "nowrap" }}>{fmtDate(ev.createdAt)}</td>
-                                        <td style={{ padding: "6px 10px" }}>{ev.type === "earn" ? "Kazandı" : "Kullandı"}</td>
-                                        <td style={{ padding: "6px 10px", fontWeight: 600, color: ev.type === "earn" ? "var(--p-color-text-success)" : "var(--p-color-text-critical)" }}>
-                                          {ev.type === "earn" ? "+" : "−"}{fmt(ev.points)}
-                                        </td>
-                                        <td style={{ padding: "6px 10px", color: "var(--p-color-text-secondary)", fontFamily: "monospace", fontSize: "11px" }}>
-                                          {ev.couponCode ?? (ev.orderId ? `#${ev.orderId}` : "—")}
-                                        </td>
+                                <div style={{ fontWeight: 700, fontSize: "13px", marginBottom: "8px" }}>Son Hareketler</div>
+                                <div style={{ maxHeight: "220px", overflowY: "auto", border: "1px solid var(--p-color-border-subdued)", borderRadius: "8px", background: "var(--p-color-bg-surface)" }}>
+                                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+                                    <thead style={{ position: "sticky", top: 0, background: "var(--p-color-bg-surface-secondary)", zIndex: 1 }}>
+                                      <tr style={{ borderBottom: "1px solid var(--p-color-border)" }}>
+                                        {["Tarih", "İşlem", "Puan", "Referans"].map((h) => (
+                                          <th key={h} style={{ padding: "6px 10px", textAlign: "left", color: "var(--p-color-text-secondary)", fontWeight: 600, whiteSpace: "nowrap" }}>{h}</th>
+                                        ))}
                                       </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
+                                    </thead>
+                                    <tbody>
+                                      {detail.events.map((ev: any) => (
+                                        <tr key={ev.id} style={{ borderBottom: "1px solid var(--p-color-border-subdued)" }}>
+                                          <td style={{ padding: "6px 10px", color: "var(--p-color-text-secondary)", whiteSpace: "nowrap" }}>{fmtDate(ev.createdAt)}</td>
+                                          <td style={{ padding: "6px 10px", whiteSpace: "nowrap" }}>{ev.type === "earn" ? "Kazandı" : "Kullandı"}</td>
+                                          <td style={{ padding: "6px 10px", fontWeight: 700, color: ev.type === "earn" ? "var(--p-color-text-success)" : "var(--p-color-text-critical)", whiteSpace: "nowrap" }}>
+                                            {ev.type === "earn" ? "+" : "−"}{fmt(ev.points)}
+                                          </td>
+                                          <td style={{ padding: "6px 10px", color: "var(--p-color-text-secondary)", fontFamily: "monospace", fontSize: "11px", maxWidth: "160px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                            {ev.couponCode ?? (ev.orderId ? `#${ev.orderId}` : "—")}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
                               </div>
                             )}
                           </div>
 
                           {/* Sağ: Manuel puan */}
-                          <div style={{ flex: "0 0 220px" }}>
-                            <div style={{ fontWeight: 600, fontSize: "13px", marginBottom: "10px" }}>Manuel Puan İşlemi</div>
-                            <pointsFetcher.Form method="POST" onSubmit={() => {}}>
-                              <input type="hidden" name="intent" value="manual_points" />
-                              <input type="hidden" name="numericId" value={c.numericId} />
-                              <div style={{ marginBottom: "10px" }}>
-                                <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "4px" }}>İşlem</label>
-                                <select name="direction" defaultValue="add" style={{ width: "100%", padding: "7px 10px", border: "1px solid var(--p-color-border)", borderRadius: "6px", fontSize: "13px", background: "var(--p-color-bg-surface)", color: "var(--p-color-text)" }}>
-                                  <option value="add">Puan Ekle</option>
-                                  <option value="remove">Puan Çıkar</option>
-                                </select>
-                              </div>
-                              <div style={{ marginBottom: "10px" }}>
-                                <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "4px" }}>Miktar</label>
-                                <input name="amount" type="number" min="0.01" step="0.01" required placeholder="100" style={{ width: "100%", boxSizing: "border-box", padding: "7px 10px", border: "1px solid var(--p-color-border)", borderRadius: "6px", fontSize: "13px", background: "var(--p-color-bg-surface)", color: "var(--p-color-text)" }} />
-                              </div>
-                              <div style={{ marginBottom: "10px" }}>
-                                <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "4px" }}>Not</label>
-                                <input name="reason" type="text" placeholder="Doğum günü hediyesi" style={{ width: "100%", boxSizing: "border-box", padding: "7px 10px", border: "1px solid var(--p-color-border)", borderRadius: "6px", fontSize: "13px", background: "var(--p-color-bg-surface)", color: "var(--p-color-text)" }} />
-                              </div>
-                              <button type="submit" disabled={isSaving} style={{ width: "100%", padding: "8px", background: "var(--p-color-bg-fill-brand)", color: "#fff", border: "none", borderRadius: "6px", fontSize: "13px", fontWeight: 600, cursor: isSaving ? "not-allowed" : "pointer", opacity: isSaving ? 0.7 : 1 }}>
-                                {isSaving ? "Kaydediliyor…" : "Uygula"}
-                              </button>
-                              {pointsFetcher.data?.saved && !isSaving && (
-                                <p style={{ margin: "8px 0 0", fontSize: "12px", color: "var(--p-color-text-success)", fontWeight: 500 }}>✓ Güncellendi</p>
-                              )}
-                              {pointsFetcher.data?.error && !isSaving && (
-                                <p style={{ margin: "8px 0 0", fontSize: "12px", color: "var(--p-color-text-critical)" }}>{pointsFetcher.data.error}</p>
-                              )}
-                            </pointsFetcher.Form>
+                          <div style={{ flex: "0 0 200px" }}>
+                            <div style={{ padding: "14px", background: "var(--p-color-bg-surface)", borderRadius: "8px", border: "1px solid var(--p-color-border-subdued)" }}>
+                              <div style={{ fontWeight: 700, fontSize: "13px", marginBottom: "12px" }}>Manuel Puan İşlemi</div>
+                              <pointsFetcher.Form method="POST">
+                                <input type="hidden" name="intent" value="manual_points" />
+                                <input type="hidden" name="numericId" value={c.numericId} />
+                                <div style={{ marginBottom: "10px" }}>
+                                  <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "4px", color: "var(--p-color-text)" }}>İşlem</label>
+                                  <select name="direction" defaultValue="add" style={{ width: "100%", padding: "7px 10px", border: "1px solid var(--p-color-border)", borderRadius: "6px", fontSize: "13px", background: "var(--p-color-bg-surface)", color: "var(--p-color-text)", fontFamily: "inherit" }}>
+                                    <option value="add">Puan Ekle</option>
+                                    <option value="remove">Puan Çıkar</option>
+                                  </select>
+                                </div>
+                                <div style={{ marginBottom: "10px" }}>
+                                  <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "4px", color: "var(--p-color-text)" }}>Miktar</label>
+                                  <input name="amount" type="number" min="0.01" step="0.01" required placeholder="100" style={{ width: "100%", boxSizing: "border-box", padding: "7px 10px", border: "1px solid var(--p-color-border)", borderRadius: "6px", fontSize: "13px", background: "var(--p-color-bg-surface)", color: "var(--p-color-text)", fontFamily: "inherit" }} />
+                                </div>
+                                <div style={{ marginBottom: "12px" }}>
+                                  <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "4px", color: "var(--p-color-text)" }}>Not (isteğe bağlı)</label>
+                                  <input name="reason" type="text" placeholder="Doğum günü hediyesi" style={{ width: "100%", boxSizing: "border-box", padding: "7px 10px", border: "1px solid var(--p-color-border)", borderRadius: "6px", fontSize: "13px", background: "var(--p-color-bg-surface)", color: "var(--p-color-text)", fontFamily: "inherit" }} />
+                                </div>
+                                <button type="submit" disabled={isSaving} style={{ width: "100%", padding: "9px", background: isSaving ? "var(--p-color-bg-fill-disabled)" : "var(--p-color-bg-fill-brand)", color: "#fff", border: "none", borderRadius: "6px", fontSize: "13px", fontWeight: 700, cursor: isSaving ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
+                                  {isSaving ? "Kaydediliyor…" : "Kaydet"}
+                                </button>
+                                {pointsFetcher.data?.saved && !isSaving && (
+                                  <p style={{ margin: "8px 0 0", fontSize: "12px", color: "var(--p-color-text-success)", fontWeight: 600 }}>✓ Puan güncellendi</p>
+                                )}
+                                {pointsFetcher.data?.error && !isSaving && (
+                                  <p style={{ margin: "8px 0 0", fontSize: "12px", color: "var(--p-color-text-critical)" }}>{pointsFetcher.data.error}</p>
+                                )}
+                              </pointsFetcher.Form>
+                            </div>
                           </div>
                         </div>
                       )}
